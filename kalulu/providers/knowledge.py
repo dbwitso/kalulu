@@ -50,8 +50,8 @@ class _Cache:
 _cache = _Cache()
 
 
-def http_json(url: str, timeout: float = 3.5):
-    hit = _cache.get(url)
+def http_json(url: str, timeout: float = 3.5, cache: bool = True):
+    hit = _cache.get(url) if cache else None
     if hit is not None:
         return hit
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
@@ -61,7 +61,8 @@ def http_json(url: str, timeout: float = 3.5):
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log.debug("fetch failed %s: %s", url, e)
         return None
-    _cache.put(url, data)
+    if cache:
+        _cache.put(url, data)
     return data
 
 

@@ -1,0 +1,9 @@
+{
+  "uuid": "kalulu-lockscreen@kalulu.dev",
+  "name": "Kalulu Lock Screen",
+  "description": "An iOS 26-style lock screen: a big glass clock that can sit behind the subject of your wallpaper, glass widgets for weather, battery and your next event, and notifications at the bottom. Prepared by the Kalulu launcher.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "session-modes": ["user", "unlock-dialog"],
+  "url": "https://github.com/dbwitso/kalulu",
+  "version": 1
+}

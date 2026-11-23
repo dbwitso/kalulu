@@ -37,6 +37,23 @@ max_items = 1000
 # Also drop unpinned entries older than this many days (0 = keep until max_items pushes them out)
 keep_days = 0
 
+[lockscreen]
+# iOS-style lock screen, drawn by the "Kalulu Lock Screen" GNOME Shell extension (install.sh adds it).
+enabled = true
+# Cut the subject out of the wallpaper so the clock sits behind it (on-device model, downloaded once)
+depth_effect = true
+# Leave empty to use your desktop wallpaper, or point at a picture just for the lock screen
+wallpaper = ""
+clock_font = "Ubuntu Sans"
+clock_weight = 700
+# Glass widgets under the clock, in order. Any of: "weather", "battery", "calendar"
+widgets = ["weather", "battery", "calendar"]
+# Show the title of your next calendar event (false shows just the time)
+show_event_titles = true
+# Weather location, e.g. "Lusaka". Empty uses the location set in GNOME Weather / the top-bar clock.
+weather_city = ""
+fahrenheit = false
+
 [files]
 # Folders searched by "f <name>" (when fd/plocate are not installed)
 roots = ["~"]

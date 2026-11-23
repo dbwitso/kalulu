@@ -240,6 +240,90 @@ def test_clipboard_provider():
     assert "Clipboard History" in titles("clipboard")
 
 
+
+def test_lockscreen_prefs_and_wallpaper():
+    from kalulu import lockscreen as L
+    p = L.prefs(E.ctx.config)
+    assert p["enabled"] and p["depth"] and p["widgets"] == ["weather", "battery", "calendar"]
+    assert L.prefs({"lockscreen": {"widgets": ["battery", "bogus"]}})["widgets"] == ["battery"]
+    pic = TMP / "pic.jpg"
+    pic.write_bytes(b"x")
+    show = TMP / "slideshow.xml"
+    show.write_text(f"<background><static><duration>1</duration><file>{pic}</file></static></background>")
+    assert L.resolve_slideshow(show) == pic
+
+    class FakeSettings:
+        def __init__(self, d): self.d = d
+        def get_string(self, k): return self.d.get(k, "")
+    bg = FakeSettings({"picture-uri": f"file://{pic}", "picture-uri-dark": f"file://{show}"})
+    assert L.current_wallpaper(p, bg, FakeSettings({"color-scheme": "default"})) == pic
+    assert L.current_wallpaper(p, bg, FakeSettings({"color-scheme": "prefer-dark"})) == pic   # via the xml
+    assert L.current_wallpaper({**p, "wallpaper": str(pic)}, None) == pic
+
+
+def test_lockscreen_weather():
+    from kalulu import lockscreen as L
+    assert L.describe_weather(2, False) == ("Partly cloudy", "weather-few-clouds-night-symbolic")
+    assert L.describe_weather(95, True)[1] == "weather-storm-symbolic"
+    calls = []
+
+    def fake_http(url, timeout=8):
+        calls.append(url)
+        if "geocoding" in url:
+            return {"results": [{"name": "Lusaka", "latitude": -15.4, "longitude": 28.3}]}
+        return {"current": {"temperature_2m": 27.6, "weather_code": 3, "is_day": 1},
+                "daily": {"temperature_2m_max": [30.9], "temperature_2m_min": [17.2]}}
+    w = L.fetch_weather({"weather_city": "Lusaka", "fahrenheit": False}, fake_http)
+    assert w["city"] == "Lusaka" and w["temp"] == 28 and w["label"] == "Overcast" and w["high"] == 31
+    assert "latitude=-15.4000" in calls[-1]
+
+    class FakeVariant:                      # GWeather keeps coordinates in radians
+        def unpack(self):
+            return [(2, ("Lusaka", "FLLS", True, [(-0.2688, 0.4939)], [(-0.2688, 0.4939)]))]
+    class FakeShellWeather:
+        def get_value(self, k): return FakeVariant()
+    name, lat, lon = L.gnome_weather_location(FakeShellWeather())
+    assert name == "Lusaka" and round(lat, 1) == -15.4 and round(lon, 1) == 28.3
+
+
+def test_lockscreen_cutout_analysis():
+    try:
+        import numpy as np
+        from kalulu.lockscreen import segment as S
+    except ImportError:
+        print("     (skipped: numpy/OpenCV not installed)")
+        return
+    a = np.zeros((400, 600), np.float32)
+    a[220:, 250:350] = 1.0                       # a subject rising to 55% under the clock
+    top, area, reason = S.analyse(a)
+    assert reason == "" and abs(top - 0.55) < 0.01
+    prof = S.profile(a, bins=12)
+    assert prof[0] == 1.0 and abs(prof[5] - 0.55) < 0.01
+    a[5:20, 10:20] = 1.0                         # a speck far away is dropped
+    assert S.keep_main(a)[10, 15] == 0 and S.keep_main(a)[300, 300] == 1.0
+    assert S.analyse(np.ones((400, 600), np.float32))[2] == "subject fills the picture"
+    assert S.analyse(np.zeros((400, 600), np.float32))[2] == "no clear subject"
+
+
+def test_lockscreen_prepare_without_model():
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        print("     (skipped: numpy/OpenCV not installed)")
+        return
+    from kalulu import lockscreen as L
+    img = TMP / "wall.png"
+    cv2.imwrite(str(img), np.full((90, 160, 3), (200, 120, 40), np.uint8))
+    p = {**L.prefs(E.ctx.config), "depth": False}
+    m = L.prepare(p, img)
+    assert Path(m["wallpaper"]).exists() and m["subject"] is None and m["width"] == 160
+    assert m["tint"].startswith("#") and m["prefs"]["font"] == "Ubuntu Sans"
+    assert L.read_meta()["source"] == str(img)
+    m2 = L.prepare(p, img)                       # unchanged wallpaper: no re-processing
+    assert m2["wallpaper"] == m["wallpaper"]
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

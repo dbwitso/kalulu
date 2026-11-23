@@ -25,6 +25,8 @@ What the installer does (all per-user, `sudo` only for apt deps if missing):
 - adds an app entry, an icon, and an autostart entry (`kalulu --background` at login)
 - registers a GNOME custom shortcut that runs `kalulu-toggle`, plus Super+Shift+V for clipboard history
 - installs and enables the *Kalulu Clipboard* GNOME Shell extension (`KALULU_CLIPBOARD=off` to skip)
+- installs the *Kalulu Lock Screen* extension, `python3-opencv python3-numpy python3-venv`, a private onnxruntime
+  and the 44 MB cut-out model (`KALULU_LOCKSCREEN=off` to skip)
 - **Super+Space:** GNOME uses this by default to switch keyboard layouts. The installer removes just that one
   binding (layout switching stays on the XF86Keyboard key), saves the old value, and `uninstall.sh` restores it.
   If you switch keyboard layouts often, install with another hotkey instead.
@@ -82,6 +84,33 @@ clipboard each time you open it. On X11 it works without the extension.
 
 History lives in `~/.local/state/kalulu/clipboard.db`, readable only by you. Copies that password managers flag
 as secret are never stored. Tune `max_items` / `keep_days`, or turn it off, under `[clipboard]` in the config.
+
+### An iOS 26-style lock screen
+
+Kalulu restyles GNOME's lock screen the way iOS 26 does it: the date and a big glass clock up top, glass
+widgets for the weather, battery and your next calendar event, and notifications and music as glass cards at
+the bottom. When the wallpaper has a clear subject, the clock stretches tall and slips **behind** it.
+
+<p align="center">
+  <img src="docs/screenshots/lockscreen.jpg" width="49%" alt="Lock screen with the clock behind Mount Fuji">
+  <img src="docs/screenshots/lockscreen-numbat.jpg" width="49%" alt="Lock screen with the clock in front">
+</p>
+<sub>Wallpapers: Ubuntu's "Fuji san" by amaral and "Little numbat boy" by azskalt.</sub>
+
+How it works: Kalulu cuts the subject out of your wallpaper on your machine with a small AI model (U²-Net
+"silueta", about 44 MB, downloaded and checksum-verified once by `install.sh`), whenever the wallpaper
+changes. It sizes the clock so the subject overlaps the digits but never hides more than about 40% of any of them.
+If that isn't possible (the subject reaches the top, or there's no clear subject) the clock goes in front.
+The clock colour is a tint of the sky behind it. The *Kalulu Lock Screen* GNOME Shell extension then draws
+everything. It only reads what Kalulu prepared, never touches the password prompt, and falls back to the
+stock lock screen on any error, so unlocking never depends on it.
+
+- Weather uses the location in GNOME Weather, or set `weather_city = "Lusaka"` under `[lockscreen]`.
+- Battery and calendar come straight from GNOME (UPower, and the same calendars as the top-bar clock).
+- Change the font, weight, widgets, or use a different wallpaper just for the lock screen under `[lockscreen]`.
+  Hide event titles with `show_event_titles = false`.
+- Changed something? Run **Refresh Lock Screen** in Kalulu, then **Lock Now to Preview** (Ctrl+K).
+- Log out and back in once after the first install so GNOME loads the extension.
 
 ### Everything else
 
@@ -165,7 +194,8 @@ quicklinks.
 
 ## Privacy
 
-Apps, files, commands, the calculator and settings are all local. Clipboard history stays on your machine (`~/.local/state/kalulu/clipboard.db`, mode 600). Inline answers send your query to Wikipedia
+Apps, files, commands, the calculator and settings are all local. The wallpaper cut-out runs entirely on your machine. Lock screen weather comes from open-meteo.com (your
+city's coordinates only, every 30 minutes). Clipboard history stays on your machine (`~/.local/state/kalulu/clipboard.db`, mode 600). Inline answers send your query to Wikipedia
 (as you type, after a short pause, 3+ characters), to DuckDuckGo (only in `?` mode) and to dictionaryapi.dev
 (only for `define`). Turn this off with `inline_answers = false` under `[web]`. `install` uses your package
 managers, which contact their own repositories.
