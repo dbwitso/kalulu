@@ -24,6 +24,7 @@ Usage: kalulu [OPTION]
   --query TEXT    show with TEXT pre-filled (e.g. --query ':' for emoji)
   --background    start resident without showing (used by autostart)
   --reload        reload config, apps, scripts and plugins
+  --doctor        list apps whose icons can't be found
   --quit          stop the resident instance
   --version
 """
@@ -70,6 +71,8 @@ class KaluluApp(Adw.Application):
             self.win.hide_launcher()
         elif a == "--show":
             self.win.show_launcher()
+        elif a == "--doctor":
+            cmdline.print_literal(self._doctor())
         elif a == "--reload":
             self.engine.reload()
         elif a == "--query":
@@ -80,6 +83,24 @@ class KaluluApp(Adw.Application):
         else:
             self.win.toggle()
         return 0
+
+    def _doctor(self) -> str:
+        from .providers.apps import AppsProvider
+        from .ui.icons import resolver
+        apps = next(p for p in self.engine.providers if isinstance(p, AppsProvider))
+        apps.refresh()
+        rows, counts = [], {}
+        for r in apps.items():
+            _, how = resolver().resolve(r.icon)
+            counts[how] = counts.get(how, 0) + 1
+            if how == "missing":
+                path = r.actions[0].payload["path"]
+                rows.append(f"  {r.title:<32} Icon={r.icon}\n    {path}")
+        head = (f"{len(apps.items())} apps · " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))
+                + f"\nicon theme: {Gtk.Settings.get_default().props.gtk_icon_theme_name}\n")
+        if not rows:
+            return head + "All app icons resolved.\n"
+        return head + "Missing icons:\n" + "\n".join(rows) + "\n"
 
     def _screenshot(self, out):
         from gi.repository import Graphene

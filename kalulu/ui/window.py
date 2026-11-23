@@ -24,16 +24,11 @@ SLOW_DEBOUNCE_MS = 140
 
 
 def make_icon(icon: str, size: int = 28) -> Gtk.Image:
-    if icon and os.path.isabs(icon) and os.path.exists(icon):
-        gicon = Gio.FileIcon.new(Gio.File.new_for_path(icon))
-    else:
-        names = [icon] if icon else []
-        if icon and not icon.endswith("-symbolic"):
-            names.append(icon + "-symbolic")
-        names.append("system-run-symbolic" if icon.endswith("-symbolic") else "application-x-executable")
-        gicon = Gio.ThemedIcon.new_from_names(names)
+    from .icons import resolver
+    gicon, _how = resolver().resolve(icon)
     img = Gtk.Image.new_from_gicon(gicon)
-    img.set_pixel_size(20 if icon.endswith("-symbolic") else size)
+    symbolic = isinstance(gicon, Gio.ThemedIcon) and gicon.get_names()[0].endswith("-symbolic")
+    img.set_pixel_size(20 if symbolic else size)
     img.set_size_request(size, size)
     return img
 

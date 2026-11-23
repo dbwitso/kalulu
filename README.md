@@ -46,7 +46,7 @@ Uninstall: `./uninstall.sh` (keeps `~/.config/kalulu`) or `./uninstall.sh --purg
 Tab completes · Esc goes back / clears / hides · Ctrl+, settings · Ctrl+R reload.
 
 CLI: `kalulu` (toggle) · `--show` · `--hide` · `--query ':'` (open prefilled, e.g. bind a second hotkey to
-the emoji picker) · `--reload` · `--quit`.
+the emoji picker) · `--reload` · `--doctor` (lists apps whose icons can't be found) · `--quit`.
 
 ## Script Commands
 
