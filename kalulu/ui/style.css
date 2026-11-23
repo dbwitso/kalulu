@@ -1,14 +1,17 @@
+/* GtkListBox's CSS node is "list" (not "listbox"): rules must target list.kalulu-list or GTK
+   ignores them and rows end up flush against the window edges. */
+
 window.kalulu {
   border-radius: 14px;
 }
 
 .kalulu-header {
-  padding: 4px 14px 4px 18px;
+  padding: 6px 20px 6px 22px;
 }
 
 entry.kalulu-entry {
   font-size: 20px;
-  min-height: 58px;
+  min-height: 56px;
   border: none;
   outline: none;
   box-shadow: none;
@@ -25,28 +28,40 @@ entry.kalulu-entry:focus-within {
   font-size: 12px;
   font-weight: 600;
   opacity: 0.55;
-  padding: 8px 16px 4px 16px;
+  padding: 12px 22px 6px 22px;
 }
 
-listbox.kalulu-list {
+list.kalulu-list {
   background: transparent;
-  padding: 2px 6px 6px 6px;
+  padding: 0 10px 10px 10px;
 }
 
-listbox.kalulu-list > row {
+list.kalulu-list > row {
   border-radius: 10px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   margin: 1px 0;
-  min-height: 34px;
+  min-height: 0;
+  outline: none;
 }
 
-listbox.kalulu-list > row:selected {
-  background: alpha(@accent_bg_color, 0.22);
+list.kalulu-list > row:selected {
+  background: alpha(@accent_bg_color, 0.20);
   color: @view_fg_color;
 }
 
-listbox.kalulu-list > row:hover:not(:selected) {
+list.kalulu-list > row:hover:not(:selected) {
   background: alpha(@view_fg_color, 0.05);
+}
+
+/* Monochrome icons get a soft tile so they line up with full-colour app icons */
+.kalulu-icon-tile {
+  border-radius: 8px;
+  background: alpha(@view_fg_color, 0.07);
+}
+
+list.kalulu-list > row:selected .kalulu-icon-tile {
+  background: alpha(@accent_bg_color, 0.22);
+  color: @accent_color;
 }
 
 .kalulu-title {
@@ -64,7 +79,7 @@ listbox.kalulu-list > row:hover:not(:selected) {
 }
 
 .kalulu-footer {
-  padding: 7px 14px;
+  padding: 8px 20px 8px 22px;
   font-size: 12px;
   background: alpha(@view_fg_color, 0.035);
 }
@@ -79,17 +94,18 @@ listbox.kalulu-list > row:hover:not(:selected) {
 }
 
 .keycap {
-  border: 1px solid alpha(@view_fg_color, 0.18);
+  border: 1px solid alpha(@view_fg_color, 0.15);
   border-radius: 5px;
-  padding: 0 6px;
+  padding: 1px 6px;
   font-size: 11px;
-  background: alpha(@view_fg_color, 0.05);
+  background: alpha(@view_fg_color, 0.04);
+  opacity: 0.85;
 }
 
 .kalulu-detail {
   font-family: "JetBrains Mono", monospace;
   font-size: 12.5px;
-  padding: 12px 16px;
+  padding: 14px 22px;
   background: transparent;
 }
 
@@ -101,5 +117,5 @@ listbox.kalulu-list > row:hover:not(:selected) {
 textview.kalulu-prose {
   font-family: inherit;
   font-size: 14px;
-  padding: 16px 22px;
+  padding: 18px 24px;
 }

@@ -4,6 +4,8 @@
 #   ./install.sh                       # default hotkey Super+Space
 #   KALULU_HOTKEY='<Alt>space' ./install.sh
 #   KALULU_HOTKEY=none ./install.sh    # skip hotkey setup
+#   KALULU_CLIP_HOTKEY='<Super><Shift>v' (default) opens clipboard history; 'none' to skip
+#   KALULU_CLIPBOARD=off ./install.sh  # don't install the GNOME Shell clipboard extension
 set -euo pipefail
 
 APP_ID="dev.kalulu.Launcher"
@@ -13,7 +15,10 @@ LIB="$PREFIX/kalulu"
 BIN="$HOME/.local/bin"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/kalulu"
 HOTKEY="${KALULU_HOTKEY:-<Super>space}"
+CLIP_HOTKEY="${KALULU_CLIP_HOTKEY:-<Super><Shift>v}"
+EXT_UUID="kalulu-clipboard@kalulu.dev"
 KB_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu/"
+KB_CLIP_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu-clipboard/"
 KB_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
 
 say()  { printf '\033[1;33m▸\033[0m %s\n' "$*"; }
@@ -51,13 +56,21 @@ chmod +x "$BIN/kalulu"
 
 # Fast path for the hotkey: poke the resident instance over D-Bus (~10 ms) instead of
 # starting Python. Falls back to the full client if Kalulu is not running yet.
+#   kalulu-toggle           toggle the launcher
+#   kalulu-toggle 'clip '   open it prefilled (used by the clipboard hotkey)
 cat > "$BIN/kalulu-toggle" <<EOF
 #!/bin/sh
 tok="\${XDG_ACTIVATION_TOKEN:-\$DESKTOP_STARTUP_ID}"
-gdbus call --session --dest $APP_ID --object-path /dev/kalulu/Launcher \\
-  --method org.gtk.Application.Activate \\
-  "{'activation-token': <'\$tok'>, 'desktop-startup-id': <'\$tok'>}" >/dev/null 2>&1 \\
-  || exec "$BIN/kalulu"
+pd="{'activation-token': <'\$tok'>, 'desktop-startup-id': <'\$tok'>}"
+if [ -n "\$1" ]; then
+  gdbus call --session --dest $APP_ID --object-path /dev/kalulu/Launcher \\
+    --method org.gtk.Actions.Activate show-query "[<'\$1'>]" "\$pd" >/dev/null 2>&1 \\
+    || exec "$BIN/kalulu" --query "\$1"
+else
+  gdbus call --session --dest $APP_ID --object-path /dev/kalulu/Launcher \\
+    --method org.gtk.Application.Activate "\$pd" >/dev/null 2>&1 \\
+    || exec "$BIN/kalulu"
+fi
 EOF
 chmod +x "$BIN/kalulu-toggle"
 
@@ -92,7 +105,38 @@ for f in "$SRC"/examples/plugins/*.py; do
 done
 ok "Example scripts → $CFG/scripts, plugins → $CFG/plugins"
 
+# ---------------------------------------------------------------- clipboard extension
+# GNOME on Wayland only lets the focused window see clipboard changes, so a tiny Shell extension
+# forwards each copy to Kalulu. Without it, history still records copies made in Kalulu and whatever
+# is on the clipboard each time you open it.
+EXT_NEW=0
+if [ "${KALULU_CLIPBOARD:-on}" != "off" ] && [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] && command -v gsettings >/dev/null; then
+  EXT_DIR="$PREFIX/gnome-shell/extensions/$EXT_UUID"
+  [ -d "$EXT_DIR" ] || EXT_NEW=1
+  rm -rf "$EXT_DIR"
+  mkdir -p "$EXT_DIR"
+  cp "$SRC/data/gnome-shell/$EXT_UUID"/* "$EXT_DIR/"
+  enabled=$(gsettings get org.gnome.shell enabled-extensions)
+  newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); u=sys.argv[2]; print(v if u in v else v+[u])" "$enabled" "$EXT_UUID")
+  gsettings set org.gnome.shell enabled-extensions "$newlist"
+  gnome-extensions enable "$EXT_UUID" >/dev/null 2>&1 || true
+  if [ "$(gsettings get org.gnome.shell disable-user-extensions)" = "true" ]; then
+    warn "User extensions are switched off in GNOME; turn them on in the Extensions app for clipboard history"
+  fi
+  ok "Clipboard extension installed ($EXT_UUID)"
+fi
+
 # ---------------------------------------------------------------- hotkey
+add_binding() {   # path name command binding
+  local list newlist
+  list=$(gsettings get $KB_SCHEMA custom-keybindings)
+  newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); p=sys.argv[2]; v=v if p in v else v+[p]; print(v)" "$list" "$1")
+  gsettings set $KB_SCHEMA custom-keybindings "$newlist"
+  gsettings set $KB_SCHEMA.custom-keybinding:$1 name "$2"
+  gsettings set $KB_SCHEMA.custom-keybinding:$1 command "$3"
+  gsettings set $KB_SCHEMA.custom-keybinding:$1 binding "$4"
+}
+
 if [ "$HOTKEY" != "none" ] && command -v gsettings >/dev/null && gsettings list-schemas 2>/dev/null | grep -qx "$KB_SCHEMA"; then
   if [ "$HOTKEY" = "<Super>space" ]; then
     # Super+Space is GNOME's "switch input source" by default. Free it (backed up for uninstall).
@@ -104,13 +148,12 @@ if [ "$HOTKEY" != "none" ] && command -v gsettings >/dev/null && gsettings list-
       say "Moved input-source switching off Super+Space (it stays on XF86Keyboard; restore with uninstall.sh)"
     fi
   fi
-  list=$(gsettings get $KB_SCHEMA custom-keybindings)
-  newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); p=sys.argv[2]; v=v if p in v else v+[p]; print(v)" "$list" "$KB_PATH")
-  gsettings set $KB_SCHEMA custom-keybindings "$newlist"
-  gsettings set $KB_SCHEMA.custom-keybinding:$KB_PATH name 'Kalulu'
-  gsettings set $KB_SCHEMA.custom-keybinding:$KB_PATH command "$BIN/kalulu-toggle"
-  gsettings set $KB_SCHEMA.custom-keybinding:$KB_PATH binding "$HOTKEY"
+  add_binding "$KB_PATH" "Kalulu" "$BIN/kalulu-toggle" "$HOTKEY"
   ok "Hotkey $HOTKEY → Kalulu (change it in Settings › Keyboard › Custom Shortcuts)"
+fi
+if [ "$CLIP_HOTKEY" != "none" ] && command -v gsettings >/dev/null && gsettings list-schemas 2>/dev/null | grep -qx "$KB_SCHEMA"; then
+  add_binding "$KB_CLIP_PATH" "Kalulu Clipboard History" "$BIN/kalulu-toggle 'clip '" "$CLIP_HOTKEY"
+  ok "Hotkey $CLIP_HOTKEY → Clipboard History"
 fi
 
 # ---------------------------------------------------------------- start
@@ -118,4 +161,7 @@ fi
 sleep 0.3
 setsid -f "$BIN/kalulu" --background >/dev/null 2>&1 < /dev/null
 ok "Kalulu is running. Press ${HOTKEY/none/your hotkey} to open it."
+if [ "$EXT_NEW" = 1 ]; then
+  say "Log out and back in once so GNOME loads the clipboard extension (Wayland can't reload the Shell live)."
+fi
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "$BIN is not on your PATH; add it to use 'kalulu' from a terminal";; esac

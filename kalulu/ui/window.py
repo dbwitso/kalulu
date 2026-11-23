@@ -21,16 +21,31 @@ log = logging.getLogger("kalulu.ui")
 
 WIDTH, HEIGHT = 760, 476
 SLOW_DEBOUNCE_MS = 140
+ICON_SLOT = 28
 
 
-def make_icon(icon: str, size: int = 28) -> Gtk.Image:
+def make_icon(icon: str, size: int = ICON_SLOT) -> Gtk.Widget:
+    """Full-colour icons (apps, file types) fill the slot. Monochrome symbolic icons sit centred on a
+    soft rounded tile of the same size, so every row's icon has the same footprint and baseline."""
     from .icons import resolver
     gicon, _how = resolver().resolve(icon)
     img = Gtk.Image.new_from_gicon(gicon)
     symbolic = isinstance(gicon, Gio.ThemedIcon) and gicon.get_names()[0].endswith("-symbolic")
-    img.set_pixel_size(20 if symbolic else size)
-    img.set_size_request(size, size)
-    return img
+    if not symbolic:
+        img.set_pixel_size(size)
+        img.set_size_request(size, size)
+        img.set_valign(Gtk.Align.CENTER)
+        return img
+    img.set_pixel_size(16)
+    img.set_hexpand(True)
+    img.set_vexpand(True)
+    tile = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+    tile.set_hexpand(False)                   # stop the image's hexpand leaking into the row
+    tile.set_vexpand(False)
+    tile.add_css_class("kalulu-icon-tile")
+    tile.set_size_request(size, size)
+    tile.append(img)
+    return tile
 
 
 def keycap(text: str) -> Gtk.Label:
@@ -44,7 +59,7 @@ class ResultRow(Gtk.ListBoxRow):
         super().__init__()
         self.result = result
         self.set_focusable(False)
-        box = Gtk.Box(spacing=12)
+        box = Gtk.Box(spacing=14)
         box.append(make_icon(result.icon))
 
         texts = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, hexpand=True)
@@ -59,7 +74,7 @@ class ResultRow(Gtk.ListBoxRow):
             title.set_hexpand(True)
         box.append(texts)
 
-        right = Gtk.Box(spacing=8)
+        right = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
         if is_action and result.actions and result.actions[0].shortcut:
             right.append(keycap(result.actions[0].shortcut))
         elif result.category:
@@ -92,10 +107,16 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.pending_confirm: tuple | None = None
         self.toast_timer = 0
         self._suppress_hide = False
+        self._last_clip_text: str | None = None
 
         self._build()
         self._keys()
         self.connect("notify::is-active", self._on_active_changed)
+        # Clipboard history. X11: fires for every copy. Wayland: only while Kalulu has focus, so the
+        # GNOME Shell extension (data/gnome-shell) reports the rest through the app's clip-add action.
+        self._clipboard = Gdk.Display.get_default().get_clipboard()
+        self._clipboard.connect("changed", lambda *_: self._capture_clipboard())
+        GLib.idle_add(self._capture_clipboard)
 
     # ------------------------------------------------------------------ build
     def _build(self):
@@ -206,6 +227,8 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.set_toast("Kalulu")
 
     def _on_active_changed(self, *_):
+        if self.is_active():
+            self._capture_clipboard()
         if self.is_active() or not self.get_visible() or self._suppress_hide:
             return
         if not self.engine.ctx.config.get("general", {}).get("hide_on_focus_loss", True):
@@ -260,6 +283,8 @@ class LauncherWindow(Adw.ApplicationWindow):
             name = "dialog-question-symbolic"
         elif text.startswith(("install ", "uninstall ", "remove ")):
             name = "system-software-install-symbolic"
+        elif text.startswith("clip "):
+            name = "edit-paste-symbolic"
         self.mode_icon.set_from_icon_name(name)
 
     def _start_slow(self, provider, text, gen, slot):
@@ -296,6 +321,8 @@ class LauncherWindow(Adw.ApplicationWindow):
             ids = [r.id for r in results]
             prev = ids.index(cur.id) if cur and cur.id in ids and self.selected_index() > 0 else 0
         limit = 60 if is_action or self.entry.get_text().startswith(("/", "~", ":", "f ", "install ")) else 40
+        if self.entry.get_text().startswith("clip ") and not is_action:
+            limit = 200
         self.results = results[:limit]
         self.listbox.remove_all()
         for i, r in enumerate(self.results):
@@ -304,6 +331,9 @@ class LauncherWindow(Adw.ApplicationWindow):
             self.section.set_label(f"Actions · {self.action_owner.title}" if self.action_owner else "Actions")
         elif not self.entry.get_text().strip():
             self.section.set_label("Recent & Suggestions")
+        elif self.entry.get_text().startswith("clip "):
+            n = len(self.engine.ctx.clips) if self.engine.ctx.clips is not None else 0
+            self.section.set_label(f"Clipboard History · {n} saved")
         else:
             self.section.set_label("Results")
         if self.results:
@@ -471,6 +501,13 @@ class LauncherWindow(Adw.ApplicationWindow):
                 self.set_toast("Done")
                 return False
             kind, text = outcome
+            if kind == "refresh":                 # e.g. a clipboard entry was pinned or deleted
+                if self.mode == "actions":
+                    self.close_actions()
+                else:
+                    self._on_changed(self.entry)
+                self.set_toast(text)
+                return False
             if kind == "detail":
                 if not self.get_visible():
                     self.show_launcher()
@@ -519,10 +556,41 @@ class LauncherWindow(Adw.ApplicationWindow):
         return {"title": table.lookup("k-title"), "dim": table.lookup("k-dim"), "small": table.lookup("k-small")}
 
     def copy(self, text: str):
-        clip = Gdk.Display.get_default().get_clipboard()
-        clip.set(text)
+        self._clipboard.set(text)
+        self._remember_clip(text)
         notify("Copied to clipboard", text[:120]) if not self.get_visible() else None
         self.set_toast("Copied to clipboard")
+
+    # ------------------------------------------------------------------ clipboard history
+    def _capture_clipboard(self):
+        if self.engine.ctx.clips is None or self._clipboard.is_local():
+            return False
+        formats = self._clipboard.get_formats()
+        if formats and formats.contain_mime_type("x-kde-passwordManagerHint"):
+            return False                      # password managers flag secrets this way; never store them
+        self._clipboard.read_text_async(None, self._on_clip_text)
+        return False
+
+    def _on_clip_text(self, clip, res):
+        try:
+            text = clip.read_text_finish(res)
+        except GLib.Error:
+            return                            # not text (an image, a file) or the owner went away
+        self._remember_clip(text)
+
+    def _remember_clip(self, text: str | None):
+        # Only record a change: reading the same clipboard again on focus must not resurrect an
+        # entry the user just deleted, or bump it back to the top.
+        if not text or text == self._last_clip_text:
+            return
+        self._last_clip_text = text
+        store = self.engine.ctx.clips
+        if store is not None and store.add(text):
+            self.on_clip_added()
+
+    def on_clip_added(self):
+        if self.get_visible() and self.mode == "search" and self.entry.get_text().startswith("clip "):
+            self._on_changed(self.entry)
 
     def _ctx(self):
         return Gdk.Display.get_default().get_app_launch_context()

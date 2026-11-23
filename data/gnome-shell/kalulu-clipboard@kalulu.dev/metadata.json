@@ -1,0 +1,8 @@
+{
+  "uuid": "kalulu-clipboard@kalulu.dev",
+  "name": "Kalulu Clipboard",
+  "description": "Passes what you copy to the Kalulu launcher so its clipboard history works on Wayland. No UI of its own; stores nothing itself.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/dbwitso/kalulu",
+  "version": 1
+}

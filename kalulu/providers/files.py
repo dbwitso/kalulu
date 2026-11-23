@@ -20,13 +20,7 @@ def _icon_for(p: Path) -> str:
     if p.is_dir():
         return "folder"
     mt, _ = mimetypes.guess_type(p.name)
-    if not mt:
-        return "text-x-generic"
-    major = mt.split("/")[0]
-    return {
-        "image": "image-x-generic", "video": "video-x-generic", "audio": "audio-x-generic",
-        "text": "text-x-generic",
-    }.get(major, "application-x-generic") if mt != "application/pdf" else "application-pdf"
+    return f"mime:{mt}" if mt else "text-x-generic"    # resolved to the theme's file-type icon in the UI
 
 
 def _pretty(p: Path) -> str:

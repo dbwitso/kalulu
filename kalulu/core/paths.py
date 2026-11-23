@@ -16,6 +16,7 @@ SCRIPTS_DIR = CONFIG_DIR / "scripts"
 PLUGINS_DIR = CONFIG_DIR / "plugins"
 FRECENCY_FILE = STATE_DIR / "frecency.json"
 LOG_FILE = STATE_DIR / "kalulu.log"
+CLIPBOARD_DB = STATE_DIR / "clipboard.db"   # not under ~/.local/share/kalulu: install.sh replaces that folder
 
 
 def ensure_dirs() -> None:

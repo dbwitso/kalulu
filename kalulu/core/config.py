@@ -28,6 +28,15 @@ language = "en"
 # Sources searched by "install <name>"
 sources = ["apt", "snap", "flatpak"]
 
+[clipboard]
+# Keep a history of what you copy, saved to disk so it survives reboots. Open it with "clip ".
+# On GNOME Wayland this needs the small "Kalulu Clipboard" Shell extension that install.sh adds.
+enabled = true
+# Oldest unpinned entries are dropped past this many. Pinned entries are always kept.
+max_items = 1000
+# Also drop unpinned entries older than this many days (0 = keep until max_items pushes them out)
+keep_days = 0
+
 [files]
 # Folders searched by "f <name>" (when fd/plocate are not installed)
 roots = ["~"]
