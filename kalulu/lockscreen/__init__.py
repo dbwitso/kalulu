@@ -243,9 +243,14 @@ def prepare(p: dict, wallpaper: Path | None, force: bool = False) -> dict:
     cmd = [python, "-m", "kalulu.lockscreen.segment", str(wallpaper), str(DIR), key]
     if p["depth"] and seg and ensure_model(seg[1]):
         cmd.append(str(model_path(seg[1])))
-    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]))
+    # Background job: idle I/O, low CPU priority and two threads, so a wallpaper change never makes
+    # the desktop or your other apps stutter (it just takes a few seconds longer).
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]),
+               OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2", KALULU_THREADS="2")
+    from ..core.system import _lower_priority, low_priority_argv
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env)
+        r = subprocess.run(low_priority_argv(cmd), capture_output=True, text=True, timeout=300, env=env,
+                           preexec_fn=_lower_priority)
         if r.returncode == 0:
             out = json.loads(r.stdout.strip().splitlines()[-1])
         else:

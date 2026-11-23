@@ -131,3 +131,42 @@ textview.kalulu-prose {
   font-size: 14px;
   padding: 18px 24px;
 }
+
+/* ---- Smoothness ---------------------------------------------------------------------------
+   No scroll-edge shadows: GTK draws "undershoot" shading at a scrolled list's edges and an
+   "overshoot" glow when you scroll past the end. In a launcher both read as dirt, not depth. */
+scrolledwindow > undershoot.top,
+scrolledwindow > undershoot.bottom,
+scrolledwindow > undershoot.left,
+scrolledwindow > undershoot.right,
+scrolledwindow > overshoot.top,
+scrolledwindow > overshoot.bottom,
+scrolledwindow > overshoot.left,
+scrolledwindow > overshoot.right {
+  background: none;
+  box-shadow: none;
+  background-image: none;
+}
+
+/* Thin overlay scrollbar that stays out of the way */
+scrolledwindow > scrollbar {
+  background: transparent;
+  border: none;
+}
+
+/* Selection and hover glide instead of snapping (GTK drops transitions when the system asks for
+   reduced animations) */
+list.kalulu-list > row {
+  transition: background-color 110ms ease-out, color 110ms ease-out;
+}
+
+.kalulu-icon-tile {
+  transition: background-color 110ms ease-out, color 110ms ease-out;
+}
+
+/* No focus ring flashing around rows when they are selected from the keyboard */
+list.kalulu-list > row:focus,
+list.kalulu-list > row:focus-visible {
+  outline: none;
+  box-shadow: none;
+}

@@ -81,10 +81,23 @@ class ResultRow(Gtk.ListBoxRow):
             acc = Gtk.Label(label=result.category)
             acc.add_css_class("kalulu-accessory")
             right.append(acc)
-        if index < 9 and not is_action:
-            right.append(keycap(f"Alt {index + 1}"))
+        self._alt = keycap("")
+        right.append(self._alt)
+        self._is_action = is_action
+        self.set_index(index)
         box.append(right)
         self.set_child(box)
+
+    def set_index(self, index: int):
+        show = index < 9 and not self._is_action
+        self._alt.set_visible(show)
+        if show:
+            self._alt.set_label(f"Alt {index + 1}")
+
+
+def _row_key(r: Result, is_action: bool) -> tuple:
+    return (r.id, r.title, r.subtitle, r.icon, r.category, is_action,
+            r.actions[0].shortcut if is_action and r.actions else "")
 
 
 class LauncherWindow(Adw.ApplicationWindow):
@@ -108,6 +121,8 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.toast_timer = 0
         self._suppress_hide = False
         self._last_clip_text: str | None = None
+        self._rows: dict[tuple, ResultRow] = {}       # reused across keystrokes: no widget churn
+        self._scroll_anim = None
 
         self._build()
         self._keys()
@@ -151,6 +166,7 @@ class LauncherWindow(Adw.ApplicationWindow):
         list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         list_box.append(self.section)
         list_box.append(self.listbox)
+        self.list_container = list_box        # what the scroll adjustment measures (header + rows)
         self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, child=list_box)
         self.stack.add_named(self.scroller, "list")
 
@@ -349,9 +365,29 @@ class LauncherWindow(Adw.ApplicationWindow):
         if self.entry.get_text().startswith("clip ") and not is_action:
             limit = 200
         self.results = results[:limit]
-        self.listbox.remove_all()
+        rows = []
         for i, r in enumerate(self.results):
-            self.listbox.append(ResultRow(r, i, is_action))
+            key = _row_key(r, is_action)
+            row = self._rows.get(key)
+            if row is None:
+                row = self._rows[key] = ResultRow(r, i, is_action)
+            row.result = r                    # fresh actions/score, same widgets
+            row.set_index(i)
+            rows.append(row)
+        current = []
+        child = self.listbox.get_first_child()
+        while child is not None:
+            current.append(child)
+            child = child.get_next_sibling()
+        if rows != current:                   # identical list (e.g. a slow provider added nothing new): no relayout
+            self.listbox.remove_all()
+            for row in rows:
+                self.listbox.append(row)
+        if len(self._rows) > 400:             # keep the cache bounded
+            keep = {_row_key(r, is_action) for r in self.results}
+            self._rows = {k: v for k, v in self._rows.items() if k in keep}
+        if not keep_selection:
+            self._jump_scroll(0)
         if self.mode == "actions":
             self.section.set_label(f"Actions · {self.action_owner.title}" if self.action_owner else "Actions")
         elif not self.entry.get_text().strip():
@@ -383,18 +419,45 @@ class LauncherWindow(Adw.ApplicationWindow):
         i = max(0, min(i, len(self.results) - 1))
         row = self.listbox.get_row_at_index(i)
         self.listbox.select_row(row)
-        # keep the selected row visible
+        # keep the selected row visible, with a short eased scroll rather than a jump
         adj = self.scroller.get_vadjustment()
-        ok, rect = row.compute_bounds(self.listbox)
+        # Bounds relative to the scrolled content (section header included), not the list alone:
+        # measuring against the list scrolled one header-height short and left the row half hidden.
+        ok, rect = row.compute_bounds(self.list_container)
         if ok:
             y, h = rect.get_y(), rect.get_height()
-            if y < adj.get_value():
-                adj.set_value(max(0, y - 30))
-            elif y + h > adj.get_value() + adj.get_page_size():
-                adj.set_value(y + h - adj.get_page_size() + 8)
+            target = None
+            if i == 0:
+                target = 0.0                   # first row: show the section header too
+            elif y < adj.get_value() + 4:
+                target = max(0.0, y - 8)
+            elif y + h > adj.get_value() + adj.get_page_size() - 4:
+                target = y + h - adj.get_page_size() + 8
+            if target is not None:
+                self._smooth_scroll(target)
         r = self.results[i]
         self.primary_label.set_label(r.primary.title if r.primary else "")
         self.pending_confirm = None
+
+    def _jump_scroll(self, value: float):
+        if self._scroll_anim:
+            self._scroll_anim.skip()
+            self._scroll_anim = None
+        self.scroller.get_vadjustment().set_value(value)
+
+    def _smooth_scroll(self, target: float):
+        adj = self.scroller.get_vadjustment()
+        start = adj.get_value()
+        if self._scroll_anim:
+            self._scroll_anim.pause()
+            self._scroll_anim = None
+        if abs(target - start) < 1:
+            return
+        anim = Adw.TimedAnimation.new(self.scroller, start, target, 140,
+                                      Adw.CallbackAnimationTarget.new(lambda v: adj.set_value(v)))
+        anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)   # follows the system's reduce-animations setting
+        self._scroll_anim = anim
+        anim.play()
 
     def move(self, delta: int):
         self.select(self.selected_index() + delta)
@@ -610,8 +673,14 @@ class LauncherWindow(Adw.ApplicationWindow):
             return
         self._last_clip_text = text
         store = self.engine.ctx.clips
-        if store is not None and store.add(text):
-            self.on_clip_added()
+        if store is None:
+            return
+
+        def work():
+            if store.add(text):
+                GLib.idle_add(lambda: (self.on_clip_added(), False)[1])
+
+        threading.Thread(target=work, daemon=True).start()
 
     def on_clip_added(self):
         if self.get_visible() and self.mode == "search" and self.entry.get_text().startswith("clip "):

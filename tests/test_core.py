@@ -339,6 +339,25 @@ def test_glass_settings():
     assert glass.STATE.stat().st_mtime_ns == before
 
 
+
+def test_background_runner_cancels_and_deprioritises():
+    import threading
+    import time as _t
+    from kalulu.core.system import CancellableRunner
+    r = CancellableRunner()
+    first = {}
+    t = threading.Thread(target=lambda: first.update(out=r.run("k", ["sh", "-c", "sleep 5; echo old"])))
+    t0 = _t.monotonic()
+    t.start()
+    _t.sleep(0.3)
+    assert r.run("k", ["sh", "-c", "echo new"]).strip() == "new"
+    t.join(3)
+    assert first["out"] is None and _t.monotonic() - t0 < 2      # the stale scan was killed, not awaited
+    nice = r.run("n", ["sh", "-c", "cat /proc/self/stat"]).split(")")[1].split()[16]
+    assert int(nice) >= 15                                        # helpers run at low CPU priority
+    assert r.run("t", ["sh", "-c", "sleep 2"], timeout=0.2) is None
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

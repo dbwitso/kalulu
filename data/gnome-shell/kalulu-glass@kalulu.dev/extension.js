@@ -10,6 +10,7 @@
 // turned off: original styles are restored and every effect and actor added here is removed.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import Meta from 'gi://Meta';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -263,11 +264,32 @@ export default class KaluluGlassExtension extends Extension {
             backdrop.set_size(Math.max(0, Math.round(w - 2 * inset)), Math.max(0, Math.round(h - 2 * inset)));
             backdrop.opacity = actor.get_paint_opacity();
         };
+        // Several properties change per animation frame; reposition at most once per frame, right
+        // before GNOME draws it, so open/close animations stay smooth.
+        const laters = global.compositor?.get_laters?.();
+        const schedule = () => {
+            if (rec.pending)
+                return;
+            if (!laters) {
+                sync();
+                return;
+            }
+            rec.pending = laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+                rec.pending = 0;
+                sync();
+                return GLib.SOURCE_REMOVE;
+            });
+        };
+        rec.cancel = () => {
+            if (rec.pending && laters)
+                laters.remove(rec.pending);
+            rec.pending = 0;
+        };
         // Follow the actor and every ancestor up to uiGroup (menus slide and fade in, banners slide down)
         for (let a = actor; a && a !== ui; a = a.get_parent()) {
             for (const sig of ['notify::allocation', 'notify::translation-x', 'notify::translation-y',
                 'notify::scale-x', 'notify::scale-y', 'notify::opacity', 'notify::visible', 'notify::mapped'])
-                rec.ids.push([a, a.connect(sig, sync)]);
+                rec.ids.push([a, a.connect(sig, schedule)]);
         }
         sync();
     }
@@ -277,6 +299,7 @@ export default class KaluluGlassExtension extends Extension {
         if (!rec)
             return;
         this._glassed.delete(actor);
+        rec.cancel?.();
         for (const [o, id] of rec.ids) {
             try {
                 o.disconnect(id);
