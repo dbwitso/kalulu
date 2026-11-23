@@ -25,6 +25,7 @@ What the installer does (all per-user, `sudo` only for apt deps if missing):
 - adds an app entry, an icon, and an autostart entry (`kalulu --background` at login)
 - registers a GNOME custom shortcut that runs `kalulu-toggle`, plus Super+Shift+V for clipboard history
 - installs and enables the *Kalulu Clipboard* GNOME Shell extension (`KALULU_CLIPBOARD=off` to skip)
+- installs the *Kalulu Glass* extension for the system-wide glass theme (`KALULU_GLASS=off` to skip)
 - installs the *Kalulu Lock Screen* extension, `python3-opencv python3-numpy python3-venv`, a private onnxruntime
   and the 44 MB cut-out model (`KALULU_LOCKSCREEN=off` to skip)
 - **Super+Space:** GNOME uses this by default to switch keyboard layouts. The installer removes just that one
@@ -84,6 +85,33 @@ clipboard each time you open it. On X11 it works without the extension.
 
 History lives in `~/.local/state/kalulu/clipboard.db`, readable only by you. Copies that password managers flag
 as secret are never stored. Tune `max_items` / `keep_days`, or turn it off, under `[clipboard]` in the config.
+
+### Glass across the whole desktop
+
+Frosted "Liquid Glass" with real background blur on the GNOME interface: the top bar, Ubuntu Dock, every menu
+(quick settings, calendar, app and window menus), notification banners, volume/brightness pop-ups, Alt+Tab,
+the overview and app grid (over a blurred wallpaper), and Kalulu's own window.
+
+<p align="center">
+  <img src="docs/screenshots/glass-calendar.jpg" width="49%" alt="Glass top bar, dock and calendar menu">
+  <img src="docs/screenshots/glass-overview.jpg" width="49%" alt="Overview over a blurred wallpaper">
+</p>
+<p align="center">
+  <img src="docs/screenshots/glass-kalulu.jpg" width="49%" alt="Kalulu's window as frosted glass over an editor">
+  <img src="docs/screenshots/glass-quicksettings.jpg" width="49%" alt="Glass quick settings">
+</p>
+<sub>Wallpaper: Ubuntu's "Monument valley" by orbitelambda.</sub>
+
+It's drawn by the *Kalulu Glass* GNOME Shell extension and configured under `[glass]` in Kalulu's config,
+with one switch per surface plus `blur`, `opacity` and `tint`. Changes apply as soon as you save. Glass
+automatically goes dark under light text and light under dark text, so menus stay readable in both modes.
+
+Normal app windows (Files, Settings, Firefox…) keep their usual look on purpose: GNOME gives apps no way to
+blur what's behind them, so making them see-through would only make them harder to read. Kalulu's window
+only turns to glass while the extension is running, because the extension draws the blur behind it.
+
+Blur costs some GPU time. On an older laptop, turn off the surfaces you care least about (`overview`
+and `dock` are the heaviest) or lower `blur`.
 
 ### An iOS 26-style lock screen
 

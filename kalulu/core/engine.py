@@ -65,6 +65,11 @@ class Engine:
         c = self.ctx
         if c.lockscreen is not None:
             c.lockscreen.schedule()            # prefs may have changed
+        try:
+            from ..glass import write_state
+            write_state(cfg)                   # the Glass extension picks this up live
+        except OSError:
+            log.exception("couldn't write glass settings")
         enabled, max_items, keep_days = _clip_settings(cfg)
         if enabled and c.clips is None:
             try:

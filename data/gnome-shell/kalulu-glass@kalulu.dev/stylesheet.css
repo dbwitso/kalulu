@@ -1,0 +1,22 @@
+/* Kalulu Glass. The tint and blur are applied in code; these rules add the glass "rim". */
+
+/* Surfaces whose tint is drawn by the blur layer underneath them */
+#panel.kalulu-glass-clear,
+.kalulu-glass-clear {
+  background-color: transparent;
+}
+
+.popup-menu-content.kalulu-glass-dark,
+.osd-window.kalulu-glass-dark,
+.switcher-list.kalulu-glass-dark {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.popup-menu-content.kalulu-glass-light,
+.osd-window.kalulu-glass-light,
+.switcher-list.kalulu-glass-light {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.search-entry.kalulu-glass-dark { border: 1px solid rgba(255, 255, 255, 0.14); }
+.search-entry.kalulu-glass-light { border: 1px solid rgba(255, 255, 255, 0.6); }

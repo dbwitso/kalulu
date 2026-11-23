@@ -5,6 +5,18 @@ window.kalulu {
   border-radius: 14px;
 }
 
+/* Glass: only switched on when the Kalulu Glass Shell extension is running, which draws the blur
+   behind this window. Without the blur, a see-through window would just be hard to read. */
+window.kalulu.kalulu-glass,
+window.kalulu.kalulu-glass.background {
+  background-color: alpha(@window_bg_color, 0.62);
+  box-shadow: inset 0 0 0 1px alpha(white, 0.10);
+}
+
+window.kalulu.kalulu-glass .kalulu-footer {
+  background: alpha(@view_fg_color, 0.04);
+}
+
 .kalulu-header {
   padding: 6px 20px 6px 22px;
 }
