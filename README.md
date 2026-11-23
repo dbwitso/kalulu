@@ -15,6 +15,7 @@ and software installs all happen in one window, without opening a browser.
 git clone https://github.com/dbwitso/kalulu && cd kalulu
 ./install.sh                                   # hotkey: Super+Space
 KALULU_HOTKEY='<Control>space' ./install.sh    # or any other binding
+KALULU_CLIP_HOTKEY=none ./install.sh           # skip the Super+Shift+V clipboard shortcut
 ```
 
 What the installer does (all per-user, `sudo` only for apt deps if missing):
@@ -22,7 +23,8 @@ What the installer does (all per-user, `sudo` only for apt deps if missing):
 - installs `python3-gi gir1.2-gtk-4.0 gir1.2-adw-1` if they're not already there
 - copies the app to `~/.local/share/kalulu`, adds `kalulu` and `kalulu-toggle` to `~/.local/bin`
 - adds an app entry, an icon, and an autostart entry (`kalulu --background` at login)
-- registers a GNOME custom shortcut that runs `kalulu-toggle`
+- registers a GNOME custom shortcut that runs `kalulu-toggle`, plus Super+Shift+V for clipboard history
+- installs and enables the *Kalulu Clipboard* GNOME Shell extension (`KALULU_CLIPBOARD=off` to skip)
 - **Super+Space:** GNOME uses this by default to switch keyboard layouts. The installer removes just that one
   binding (layout switching stays on the XF86Keyboard key), saves the old value, and `uninstall.sh` restores it.
   If you switch keyboard layouts often, install with another hotkey instead.
@@ -64,6 +66,23 @@ flatpak updates in one go.
 
 <img src="docs/screenshots/install.png" width="70%" alt="Installing software">
 
+### Clipboard history that survives a restart
+
+Everything you copy is saved, so after a reboot or a power cut it's all still there. Press **Super+Shift+V**
+(or type `clip `) to see it, newest first, and type to filter. ↵ copies an entry back, Ctrl+↵ shows the full
+text, and Ctrl+K pins an entry to the top, deletes it, or clears the history (pinned entries are kept).
+Links and paths get an Open action too.
+
+<img src="docs/screenshots/clipboard.png" width="70%" alt="Clipboard history">
+
+On GNOME Wayland, only the focused window is told about copies, so `install.sh` adds a tiny companion Shell
+extension (*Kalulu Clipboard*) that passes each copy to Kalulu. Log out and back in once after the first install
+so GNOME loads it. Without it, Kalulu still records what you copy from inside Kalulu and whatever is on the
+clipboard each time you open it. On X11 it works without the extension.
+
+History lives in `~/.local/state/kalulu/clipboard.db`, readable only by you. Copies that password managers flag
+as secret are never stored. Tune `max_items` / `keep_days`, or turn it off, under `[clipboard]` in the config.
+
 ### Everything else
 
 <p align="center">
@@ -86,6 +105,7 @@ flatpak updates in one go.
 | `lock`, `sleep`, `dark`, `dnd`, `night`, `trash`, `restart`, `upgrade` | System commands (destructive ones ask for a second ↵) |
 | `> docker ps` | Shell: ↵ runs it in a terminal, Ctrl+↵ shows the output inside Kalulu |
 | `:party` | Emoji picker (copies) |
+| `clip `, `clip ssh` or Super+Shift+V | Clipboard history (kept across reboots) |
 | `gh kalulu`, `yt …`, `maps …`, `pkg …` | Quicklinks (edit them in config) |
 | `github.com/dbwitso` | Opens the URL |
 | `kill chrome` | Process killer (example plugin) |
@@ -145,7 +165,7 @@ quicklinks.
 
 ## Privacy
 
-Apps, files, commands, the calculator and settings are all local. Inline answers send your query to Wikipedia
+Apps, files, commands, the calculator and settings are all local. Clipboard history stays on your machine (`~/.local/state/kalulu/clipboard.db`, mode 600). Inline answers send your query to Wikipedia
 (as you type, after a short pause, 3+ characters), to DuckDuckGo (only in `?` mode) and to dictionaryapi.dev
 (only for `define`). Turn this off with `inline_answers = false` under `[web]`. `install` uses your package
 managers, which contact their own repositories.

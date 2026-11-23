@@ -87,6 +87,18 @@ class IconResolver:
         if not icon:
             return Gio.ThemedIcon.new(FALLBACK_APP), "missing"
 
+        if icon.startswith("mime:"):
+            # The theme's own icon for the file type (spreadsheet, PDF, archive…), with the same
+            # fallback chain Files uses, instead of one blank page for everything.
+            mime = icon[5:]
+            ctype = Gio.content_type_from_mime_type(mime) or mime
+            names = list(Gio.content_type_get_icon(ctype).get_names())
+            names += [Gio.content_type_get_generic_icon_name(ctype) or "", "text-x-generic"]
+            for n in names:
+                if n and not n.endswith("-symbolic") and self.theme.has_icon(n):
+                    return Gio.ThemedIcon.new(n), "theme"
+            return Gio.ThemedIcon.new("text-x-generic"), "missing"
+
         if icon.endswith("-symbolic"):
             g = self._themed(icon)
             if g:

@@ -151,6 +151,12 @@ def steps():
     yield lambda: shot("emoji")
     yield lambda: w.reset("display")
     yield lambda: shot("settings")
+    yield lambda: [app.engine.ctx.clips.add(t) for t in (
+        "#e8590c", "~/Documents/Tupane/budget-forecast-q1.csv",
+        "def handler(event):\n    return {\"ok\": True}\n",
+        "netbird status --detail", "https://github.com/dbwitso/kalulu")]
+    yield lambda: w.reset("clip ")
+    yield lambda: shot("clipboard")
     yield lambda: app.quit()
 
 

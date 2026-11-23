@@ -199,6 +199,47 @@ def test_settings_panels():
     assert "Update All Software" in titles("upgrade")
 
 
+
+def test_clipboard_history_persists():
+    from kalulu.core.clipstore import ClipStore
+    db = TMP / "clip-test.db"
+    s1 = ClipStore(db, max_items=3)
+    assert s1.add("first") and s1.add("second") and s1.add("https://github.com/dbwitso/kalulu")
+    assert not s1.add("   ")                      # blank copies are ignored
+    s1.add("first")                               # re-copy moves it back to the top
+    assert [c.text for c in s1.all()][0] == "first"
+    assert (db.stat().st_mode & 0o777) == 0o600   # history can hold secrets
+    pin = next(c for c in s1.all() if c.text == "second")
+    s1.set_pinned(pin.id, True)
+    for i in range(5):
+        s1.add(f"filler {i}")
+    s1.close()
+
+    s2 = ClipStore(db, max_items=3)               # "after a reboot": new process, same file
+    texts = [c.text for c in s2.all()]
+    assert texts[0] == "second"                   # pinned first, and never pruned
+    assert len(texts) == 4 and "first" not in texts
+    assert s2.clear(keep_pinned=True) == 3 and [c.text for c in s2.all()] == ["second"]
+
+
+def test_clipboard_provider():
+    store = E.ctx.clips
+    assert store is not None
+    store.add("ssh dabs@10.0.0.5 -p 2222")
+    store.add("https://usetupane.com")
+    store.add("line one\nline two")
+    res = E.search("clip ")
+    assert res[0].title == "line one line two" and res[0].category == "Clipboard"
+    assert all(r.id.startswith("clip:") for r in res)          # "clip " hides apps, web search etc.
+    hit = E.search("clip tupane")
+    assert hit[0].title == "https://usetupane.com" and "Link" in hit[0].subtitle
+    assert any(a.title == "Open Link" for a in hit[0].actions)
+    delete = next(a for a in hit[0].actions if a.title == "Delete Entry")
+    kind, _msg = E.execute(delete)
+    assert kind == "refresh" and not [r for r in E.search("clip tupane") if "usetupane" in r.title]
+    assert "Clipboard History" in titles("clipboard")
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

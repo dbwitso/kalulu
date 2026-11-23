@@ -49,6 +49,14 @@ class KaluluApp(Adw.Application):
             str(Path(__file__).parent / "ui"))
         from .ui.window import LauncherWindow
         self.win = LauncherWindow(self, self.engine)
+        # D-Bus entry points (org.gtk.Actions on /dev/kalulu/Launcher):
+        #   clip-add   — the GNOME Shell extension reports each copy here (Wayland hides it from apps)
+        #   show-query — kalulu-toggle 'clip ' opens Kalulu prefilled without starting Python
+        for name, handler in (("clip-add", lambda _a, v: self.win._remember_clip(v.get_string())),
+                              ("show-query", lambda _a, v: self.win.show_launcher(v.get_string()))):
+            act = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
+            act.connect("activate", handler)
+            self.add_action(act)
         if not self._held:
             self.hold()          # stay resident after the window hides
             self._held = True

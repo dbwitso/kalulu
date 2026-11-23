@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from . import config as config_mod
 from . import fuzzy, paths
+from .clipstore import ClipStore
 from .frecency import Frecency
 from .models import Action, Result
 from .system import notify, run_capture, spawn, terminal_argv
@@ -24,6 +25,12 @@ class Context:
     frecency: Frecency
     config_error: str | None = None
     engine: "Engine | None" = None
+    clips: "ClipStore | None" = None
+
+
+def _clip_settings(cfg: dict) -> tuple[bool, int, int]:
+    c = cfg.get("clipboard", {})
+    return bool(c.get("enabled", True)), int(c.get("max_items", 1000)), int(c.get("keep_days", 0))
 
 
 class Engine:
@@ -36,6 +43,7 @@ class Engine:
     def reload(self) -> None:
         from ..providers.apps import AppsProvider
         from ..providers.calculator import CalculatorProvider
+        from ..providers.clipboard import ClipboardProvider
         from ..providers.commands import KaluluCommandsProvider, SystemCommandsProvider
         from ..providers.files import BlendedFilesProvider, FilesProvider
         from ..providers.knowledge import DefineProvider, KnowledgeProvider
@@ -54,11 +62,24 @@ class Engine:
         if err:
             log.warning(err)
         c = self.ctx
+        enabled, max_items, keep_days = _clip_settings(cfg)
+        if enabled and c.clips is None:
+            try:
+                c.clips = ClipStore(max_items=max_items, keep_days=keep_days)
+            except Exception:
+                log.exception("clipboard history unavailable")
+        elif c.clips is not None:
+            if enabled:
+                c.clips.max_items, c.clips.keep_days = max_items, keep_days
+                c.clips.prune()
+            else:
+                c.clips.close()
+                c.clips = None
         self.providers = [
             CalculatorProvider(c), AppsProvider(c), ScriptsProvider(c), SystemCommandsProvider(c),
             SettingsPanelsProvider(c), KaluluCommandsProvider(c), QuicklinksProvider(c), FilesProvider(c),
             BlendedFilesProvider(c), PackagesProvider(c), KnowledgeProvider(c), DefineProvider(c),
-            ShellProvider(c), EmojiProvider(c), *load_plugins(c), WebProvider(c),
+            ShellProvider(c), EmojiProvider(c), ClipboardProvider(c), *load_plugins(c), WebProvider(c),
         ]
 
     def refresh(self) -> None:
@@ -76,7 +97,7 @@ class Engine:
     def _active(self, text: str):
         """Symbol prefixes (> : / ~) are exclusive modes; word prefixes ("kill ", "f ") blend in."""
         hit = [(p, x) for p in self.providers for x in p.prefixes if text.startswith(x)]
-        exclusive = [p for p, x in hit if not x[0].isalnum()]
+        exclusive = [p for p, x in hit if not x[0].isalnum() or p.exclusive]
         if exclusive:
             return list(dict.fromkeys(exclusive))
         word = list(dict.fromkeys(p for p, _ in hit))
