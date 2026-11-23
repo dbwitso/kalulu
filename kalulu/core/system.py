@@ -78,3 +78,68 @@ def exec_to_argv(exec_line: str) -> list[str]:
     except ValueError:
         parts = exec_line.split()
     return [p.replace("%%", "%") for p in parts if p not in _FIELD_CODES]
+
+
+# ---------------------------------------------------------------------------- background helpers
+def _lower_priority() -> None:          # runs in the child, before exec
+    try:
+        os.nice(15)
+    except OSError:
+        pass
+
+
+def low_priority_argv(argv: list[str]) -> list[str]:
+    """Run argv at idle I/O priority (when ionice exists): background scans must never slow
+    down whatever the user is doing."""
+    ionice = shutil.which("ionice")
+    return [ionice, "-c", "3", *argv] if ionice else list(argv)
+
+
+def _kill_group(p: subprocess.Popen) -> None:
+    """Kill the helper and anything it started (so nothing keeps its output pipe open)."""
+    import signal
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        try:
+            p.kill()
+        except ProcessLookupError:
+            pass
+
+
+class CancellableRunner:
+    """One background helper per key (e.g. "files"): starting a new run kills the previous one, so
+    fast typing never stacks up overlapping scans. Low CPU and I/O priority."""
+
+    def __init__(self):
+        import threading
+        self._lock = threading.Lock()
+        self._procs: dict[str, subprocess.Popen] = {}
+
+    def run(self, key: str, argv: list[str], timeout: float = 3.0) -> str | None:
+        """stdout, or None if cancelled by a newer run, timed out or failed."""
+        try:
+            p = subprocess.Popen(low_priority_argv(argv), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 stdin=subprocess.DEVNULL, text=True, preexec_fn=_lower_priority,
+                                 cwd=os.path.expanduser("~"), start_new_session=True)
+        except OSError:
+            return None
+        with self._lock:
+            old = self._procs.get(key)
+            self._procs[key] = p
+        if old and old.poll() is None:
+            _kill_group(old)
+        try:
+            out, _ = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_group(p)
+            p.communicate()
+            return None
+        finally:
+            with self._lock:
+                if self._procs.get(key) is p:
+                    del self._procs[key]
+        return None if p.returncode and p.returncode < 0 else out
+
+
+runner = CancellableRunner()

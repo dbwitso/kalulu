@@ -4,13 +4,16 @@ from __future__ import annotations
 import mimetypes
 import os
 import shutil
-import subprocess
 import time
 from pathlib import Path
 
 from ..core import fuzzy
 from ..core.models import Action, Result
+from ..core.system import runner
 from .base import Provider
+
+_RECENT_TTL = 15.0
+_recent: dict[tuple, tuple[float, list]] = {}
 
 _SKIP = {"node_modules", "__pycache__", ".git", ".cache", "venv", ".venv", "snap", ".local", ".npm",
          ".cargo", ".rustup", "site-packages", ".var"}
@@ -109,22 +112,35 @@ class FilesProvider(Provider):
         return hits
 
     def _search_tools(self, term: str, roots: list[str], walk: bool, budget: float = 0.6) -> list[Path]:
+        key = (term.lower(), tuple(roots))
+        hit = _recent.get(key)
+        if hit and time.monotonic() - hit[0] < _RECENT_TTL:
+            return hit[1]                      # backspacing / retyping: no new scan
         fd = shutil.which("fd") or shutil.which("fdfind")
-        try:
-            if fd:
-                out = subprocess.run([fd, "-i", "--max-results", "60", "--", term, *roots],
-                                     capture_output=True, text=True, timeout=3).stdout
-                return [Path(l) for l in out.splitlines() if l]
-            if shutil.which("plocate") or shutil.which("locate"):
-                loc = shutil.which("plocate") or shutil.which("locate")
-                out = subprocess.run([loc, "-i", "-l", "200", "--basename", term],
-                                     capture_output=True, text=True, timeout=3).stdout
-                paths = [Path(l) for l in out.splitlines() if l and any(l.startswith(r) for r in roots)]
-                if paths:
-                    return paths[:60]
-        except (subprocess.SubprocessError, OSError):
-            pass
-        return self._walk(term, roots, budget) if walk else []
+        found: list[Path] | None = None
+        if fd:
+            # 2 threads, bounded depth, the usual junk excluded, idle priority, and a newer keystroke
+            # cancels this scan instead of piling another one on top.
+            depth = str(int(self.ctx.config.get("files", {}).get("max_depth", 6)) + 2)
+            excludes = [x for d in sorted(_SKIP) for x in ("--exclude", d)]
+            out = runner.run(f"fd:{self.name}", [fd, "-i", "--threads", "2", "--max-depth", depth,
+                                                 "--max-results", "60", *excludes, "--", term, *roots])
+            if out is None:
+                return []                      # superseded by a newer query
+            found = [Path(l) for l in out.splitlines() if l]
+        elif shutil.which("plocate") or shutil.which("locate"):
+            loc = shutil.which("plocate") or shutil.which("locate")
+            out = runner.run(f"locate:{self.name}", [loc, "-i", "-l", "200", "--basename", term])
+            if out is None:
+                return []
+            found = [Path(l) for l in out.splitlines() if l and any(l.startswith(r) for r in roots)][:60] or None
+        if found is None:
+            found = self._walk(term, roots, budget) if walk else []
+        _recent[key] = (time.monotonic(), found)
+        if len(_recent) > 64:
+            for k in sorted(_recent, key=lambda k: _recent[k][0])[:32]:
+                _recent.pop(k, None)
+        return found
 
     def _walk(self, term: str, roots: list[str], budget: float = 0.6) -> list[Path]:
         deadline = time.monotonic() + budget

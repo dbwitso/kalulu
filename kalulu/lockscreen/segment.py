@@ -14,6 +14,7 @@ onnxruntime when that's installed, otherwise through OpenCV's DNN module.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -27,10 +28,17 @@ STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 CLOCK_BAND = (0.2, 0.8)          # horizontal span where the clock sits
 
 
+THREADS = max(1, int(os.environ.get("KALULU_THREADS", "2")))
+cv2.setNumThreads(THREADS)
+
+
 def load_runner(model: str):
     try:
         import onnxruntime as ort
-        sess = ort.InferenceSession(model, providers=["CPUExecutionProvider"])
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = THREADS          # don't grab every core for a background job
+        opts.inter_op_num_threads = 1
+        sess = ort.InferenceSession(model, sess_options=opts, providers=["CPUExecutionProvider"])
         name = sess.get_inputs()[0].name
         return lambda x: sess.run(None, {name: x})[0]
     except ImportError:
