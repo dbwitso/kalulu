@@ -43,6 +43,19 @@ if [ "${KALULU_LOCKSCREEN:-on}" != "off" ] && ! "$PY" -c 'import cv2, numpy, ven
   sudo apt-get install -y python3-opencv python3-numpy python3-venv || warn "Skipped; the lock screen will work without the depth effect"
 fi
 
+# GNOME's file index (LocalSearch) gives instant file search including text inside documents;
+# Kalulu needs its introspection binding, which Ubuntu doesn't install by default.
+if ! "$PY" -c 'import gi; gi.require_version("Tsparql","3.0")' 2>/dev/null &&
+   ! "$PY" -c 'import gi; gi.require_version("Tracker","3.0")' 2>/dev/null; then
+  for pkg in gir1.2-tsparql-3.0 gir1.2-tracker-3.0; do    # 24.10+ / 24.04
+    if apt-cache show "$pkg" >/dev/null 2>&1; then
+      say "Installing the GNOME file index binding for faster file search (needs sudo)"
+      sudo apt-get install -y "$pkg" || warn "Skipped; file search will use fd/plocate"
+      break
+    fi
+  done
+fi
+
 missing=()
 command -v fdfind >/dev/null || command -v fd >/dev/null || missing+=(fd-find)
 command -v notify-send >/dev/null || missing+=(libnotify-bin)

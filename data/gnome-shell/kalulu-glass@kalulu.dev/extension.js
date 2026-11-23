@@ -412,38 +412,33 @@ export default class KaluluGlassExtension extends Extension {
         const winActor = win.get_compositor_private();
         if (!winActor)
             return;
+        // The blur goes *inside* the window actor, beneath its surface. A sibling below the window in
+        // window_group doesn't work: GNOME restacks window_group whenever focus or stacking changes and
+        // can move a non-window actor above the window, blurring the window's own contents.
         const blur = new St.Widget({reactive: false, style_class: 'kalulu-glass-window-blur'});
         blur.add_effect(this._blurEffect(1.2));
-        global.window_group.insert_child_below(blur, winActor);
+        winActor.insert_child_at_index(blur, 0);
         const sync = () => {
-            const r = win.get_frame_rect();
-            blur.set_position(r.x + KALULU_INSET, r.y + KALULU_INSET);
-            blur.set_size(Math.max(0, r.width - 2 * KALULU_INSET), Math.max(0, r.height - 2 * KALULU_INSET));
-            blur.visible = winActor.visible && !win.minimized;
-            blur.opacity = winActor.opacity;
+            const f = win.get_frame_rect();
+            const b = win.get_buffer_rect();       // the window actor's origin (frame + client shadows)
+            blur.set_position(f.x - b.x + KALULU_INSET, f.y - b.y + KALULU_INSET);
+            blur.set_size(Math.max(0, f.width - 2 * KALULU_INSET), Math.max(0, f.height - 2 * KALULU_INSET));
         };
-        const ids = [
-            [win, win.connect('position-changed', sync)],
-            [win, win.connect('size-changed', sync)],
-            [winActor, winActor.connect('notify::visible', sync)],
-            [winActor, winActor.connect('notify::opacity', sync)],
-        ];
-        const done = () => {
-            for (const [o, id] of ids) {
+        const ids = [[win, win.connect('size-changed', sync)], [win, win.connect('position-changed', sync)]];
+        const disconnect = () => {
+            for (const [o, id] of ids.splice(0)) {
                 try {
                     o.disconnect(id);
                 } catch (_e) {}
             }
+        };
+        ids.push([win, win.connect('unmanaged', () => {
+            disconnect();
             this._kaluluBlurs?.delete(win);
-            blur.destroy();
-        };
-        ids.push([win, win.connect('unmanaged', done)]);
+        })]);
         blur.connect('destroy', () => {
-            for (const [o, id] of ids) {
-                try {
-                    o.disconnect(id);
-                } catch (_e) {}
-            }
+            disconnect();
+            this._kaluluBlurs?.delete(win);
         });
         this._kaluluBlurs.set(win, blur);
         sync();

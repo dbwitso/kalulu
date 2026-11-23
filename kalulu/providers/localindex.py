@@ -58,7 +58,11 @@ def _connect():
             except Exception as e:  # GLib.Error, not activatable, etc.
                 log.debug("index %s/%s unavailable: %s", mod.__name__, bus, e)
     _unavailable = True
-    log.info("no GNOME file index available; falling back to fd/plocate")
+    if not mods:
+        log.warning("GNOME file index unreachable: the Python binding is missing "
+                    "(sudo apt install gir1.2-tsparql-3.0); falling back to fd/plocate")
+    else:
+        log.info("no GNOME file index available; falling back to fd/plocate")
     return None
 
 
