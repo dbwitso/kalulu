@@ -1,0 +1,8 @@
+{
+  "uuid": "kalulu-glass@kalulu.dev",
+  "name": "Kalulu Glass",
+  "description": "Frosted 'Liquid Glass' for the GNOME interface: top bar, Ubuntu Dock, menus and quick settings, notifications, volume/brightness pop-ups, Alt+Tab, the overview, and the Kalulu launcher. Real background blur. Configured from Kalulu.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "url": "https://github.com/dbwitso/kalulu",
+  "version": 1
+}

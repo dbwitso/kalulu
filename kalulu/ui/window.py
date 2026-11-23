@@ -196,10 +196,35 @@ class LauncherWindow(Adw.ApplicationWindow):
             # windows, but may refuse focus requests from an already-mapped one.
             self.set_visible(False)
         self.reset(query or "")
+        self._sync_glass()
         self.present()
         self.entry.grab_focus_without_selecting()
         self.entry.set_position(-1)
         GLib.idle_add(self._idle_refresh)
+
+    def _sync_glass(self):
+        """Translucent window only while the Glass extension is active (it blurs what's behind us)."""
+        from ..glass import EXTENSION_UUID, settings
+        if not settings(self.engine.ctx.config)["enabled"] or not settings(self.engine.ctx.config)["kalulu"]:
+            self.remove_css_class("kalulu-glass")
+            return
+
+        def done(bus, res, _data=None):
+            active = False
+            try:
+                info = bus.call_finish(res).unpack()[0]
+                active = int(info.get("state", 0)) == 1      # ExtensionState.ENABLED / ACTIVE
+            except Exception:
+                active = False
+            (self.add_css_class if active else self.remove_css_class)("kalulu-glass")
+
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            bus.call("org.gnome.Shell", "/org/gnome/Shell", "org.gnome.Shell.Extensions", "GetExtensionInfo",
+                     GLib.Variant("(s)", (EXTENSION_UUID,)), GLib.VariantType.new("(a{sv})"),
+                     Gio.DBusCallFlags.NONE, 500, None, done, None)
+        except GLib.Error:
+            self.remove_css_class("kalulu-glass")
 
     def _idle_refresh(self):
         self.engine.refresh()

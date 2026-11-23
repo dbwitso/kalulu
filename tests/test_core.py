@@ -324,6 +324,21 @@ def test_lockscreen_prepare_without_model():
     assert m2["wallpaper"] == m["wallpaper"]
 
 
+
+def test_glass_settings():
+    import json
+    from kalulu import glass
+    s = glass.settings(E.ctx.config)
+    assert s["enabled"] and all(s[p] for p in glass.PARTS) and s["tint"] == "auto"
+    clamp = glass.settings({"glass": {"blur": 500, "opacity": 0.01, "tint": "purple", "dock": False}})
+    assert clamp["blur"] == 120 and clamp["opacity"] == 0.1 and clamp["tint"] == "auto" and not clamp["dock"]
+    glass.write_state(E.ctx.config)                      # the Shell extension reads this file
+    assert json.loads(glass.STATE.read_text()) == s
+    before = glass.STATE.stat().st_mtime_ns
+    glass.write_state(E.ctx.config)                      # unchanged: not rewritten (no needless rebuild)
+    assert glass.STATE.stat().st_mtime_ns == before
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

@@ -37,6 +37,21 @@ max_items = 1000
 # Also drop unpinned entries older than this many days (0 = keep until max_items pushes them out)
 keep_days = 0
 
+[glass]
+# Frosted "Liquid Glass" with real background blur across the GNOME interface, drawn by the
+# "Kalulu Glass" GNOME Shell extension (install.sh adds it). Changes apply as soon as you save.
+enabled = true
+panel = true           # top bar
+dock = true            # Ubuntu Dock
+menus = true           # quick settings, calendar, app and window menus
+notifications = true   # notification banners
+popups = true          # volume/brightness pop-ups, Alt+Tab
+overview = true        # blurred wallpaper behind the overview and app grid
+kalulu = true          # this launcher's own window
+blur = 36              # blur strength, 4-120
+opacity = 0.42         # how solid the glass tint is, 0.1-0.9 (raise it if text feels hard to read)
+tint = "auto"          # "auto" follows each surface's text colour; or "light" / "dark"
+
 [lockscreen]
 # iOS-style lock screen, drawn by the "Kalulu Lock Screen" GNOME Shell extension (install.sh adds it).
 enabled = true

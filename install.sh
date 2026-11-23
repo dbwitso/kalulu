@@ -7,6 +7,7 @@
 #   KALULU_CLIP_HOTKEY='<Super><Shift>v' (default) opens clipboard history; 'none' to skip
 #   KALULU_CLIPBOARD=off ./install.sh  # don't install the GNOME Shell clipboard extension
 #   KALULU_LOCKSCREEN=off ./install.sh # don't install the iOS-style lock screen
+#   KALULU_GLASS=off ./install.sh      # don't install the system-wide glass theme
 set -euo pipefail
 
 APP_ID="dev.kalulu.Launcher"
@@ -19,6 +20,7 @@ HOTKEY="${KALULU_HOTKEY:-<Super>space}"
 CLIP_HOTKEY="${KALULU_CLIP_HOTKEY:-<Super><Shift>v}"
 EXT_UUID="kalulu-clipboard@kalulu.dev"
 LOCK_UUID="kalulu-lockscreen@kalulu.dev"
+GLASS_UUID="kalulu-glass@kalulu.dev"
 KB_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu/"
 KB_CLIP_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu-clipboard/"
 KB_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
@@ -131,6 +133,10 @@ if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] && command -v gsettings >/dev/nul
   if [ "${KALULU_CLIPBOARD:-on}" != "off" ]; then
     install_ext "$EXT_UUID"
     ok "Clipboard extension installed ($EXT_UUID)"
+  fi
+  if [ "${KALULU_GLASS:-on}" != "off" ]; then
+    install_ext "$GLASS_UUID"
+    ok "Glass theme extension installed ($GLASS_UUID); tune it under [glass] in config.toml"
   fi
   if [ "${KALULU_LOCKSCREEN:-on}" != "off" ]; then
     install_ext "$LOCK_UUID"
