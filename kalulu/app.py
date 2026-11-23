@@ -25,6 +25,8 @@ Usage: kalulu [OPTION]
   --background    start resident without showing (used by autostart)
   --reload        reload config, apps, scripts and plugins
   --doctor        list apps whose icons can't be found
+  --lockscreen-refresh   re-cut the wallpaper and refresh lock screen weather
+  --lockscreen-setup     one-off: install the cut-out engine and model (used by install.sh)
   --quit          stop the resident instance
   --version
 """
@@ -57,6 +59,11 @@ class KaluluApp(Adw.Application):
             act = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             act.connect("activate", handler)
             self.add_action(act)
+        try:
+            from .lockscreen.service import LockscreenService
+            self.engine.ctx.lockscreen = LockscreenService(self.engine)
+        except Exception:
+            logging.getLogger("kalulu").exception("lock screen service unavailable")
         if not self._held:
             self.hold()          # stay resident after the window hides
             self._held = True
@@ -83,6 +90,10 @@ class KaluluApp(Adw.Application):
             cmdline.print_literal(self._doctor())
         elif a == "--reload":
             self.engine.reload()
+        elif a == "--lockscreen-refresh":
+            if self.engine.ctx.lockscreen:
+                self.engine.ctx.lockscreen.refresh(force=True)
+                cmdline.print_literal("Refreshing the lock screen in the background\n")
         elif a == "--query":
             self.win.show_launcher(" ".join(args[1:]))
         elif a == "--screenshot":            # dev aid: --screenshot out.png [query]
@@ -127,6 +138,10 @@ class KaluluApp(Adw.Application):
 
 def run() -> int:
     paths.ensure_dirs()
+    if sys.argv[1:2] == ["--lockscreen-setup"]:
+        from .lockscreen import setup_ml
+        ok = setup_ml(say=lambda m: print("  " + m, flush=True))
+        return 0 if ok else 1
     logging.basicConfig(
         level=logging.DEBUG if os.environ.get("KALULU_DEBUG") else logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",

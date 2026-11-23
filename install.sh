@@ -6,6 +6,7 @@
 #   KALULU_HOTKEY=none ./install.sh    # skip hotkey setup
 #   KALULU_CLIP_HOTKEY='<Super><Shift>v' (default) opens clipboard history; 'none' to skip
 #   KALULU_CLIPBOARD=off ./install.sh  # don't install the GNOME Shell clipboard extension
+#   KALULU_LOCKSCREEN=off ./install.sh # don't install the iOS-style lock screen
 set -euo pipefail
 
 APP_ID="dev.kalulu.Launcher"
@@ -17,6 +18,7 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}/kalulu"
 HOTKEY="${KALULU_HOTKEY:-<Super>space}"
 CLIP_HOTKEY="${KALULU_CLIP_HOTKEY:-<Super><Shift>v}"
 EXT_UUID="kalulu-clipboard@kalulu.dev"
+LOCK_UUID="kalulu-lockscreen@kalulu.dev"
 KB_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu/"
 KB_CLIP_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu-clipboard/"
 KB_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
@@ -33,6 +35,11 @@ if ! "$PY" -c 'import gi; gi.require_version("Gtk","4.0"); gi.require_version("A
 fi
 "$PY" -c 'import sys; assert sys.version_info >= (3, 11)' || { warn "Python 3.11+ required"; exit 1; }
 ok "GTK4 / libadwaita available"
+
+if [ "${KALULU_LOCKSCREEN:-on}" != "off" ] && ! "$PY" -c 'import cv2, numpy, venv, ensurepip' 2>/dev/null; then
+  say "Installing OpenCV + numpy for the lock screen's wallpaper cut-out (needs sudo)"
+  sudo apt-get install -y python3-opencv python3-numpy python3-venv || warn "Skipped; the lock screen will work without the depth effect"
+fi
 
 missing=()
 command -v fdfind >/dev/null || command -v fd >/dev/null || missing+=(fd-find)
@@ -105,25 +112,35 @@ for f in "$SRC"/examples/plugins/*.py; do
 done
 ok "Example scripts → $CFG/scripts, plugins → $CFG/plugins"
 
-# ---------------------------------------------------------------- clipboard extension
-# GNOME on Wayland only lets the focused window see clipboard changes, so a tiny Shell extension
-# forwards each copy to Kalulu. Without it, history still records copies made in Kalulu and whatever
-# is on the clipboard each time you open it.
+# ---------------------------------------------------------------- GNOME Shell extensions
+# Clipboard: GNOME on Wayland only lets the focused window see clipboard changes, so a tiny Shell
+# extension forwards each copy to Kalulu. Lock screen: only a Shell extension can draw on it.
 EXT_NEW=0
-if [ "${KALULU_CLIPBOARD:-on}" != "off" ] && [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] && command -v gsettings >/dev/null; then
-  EXT_DIR="$PREFIX/gnome-shell/extensions/$EXT_UUID"
-  [ -d "$EXT_DIR" ] || EXT_NEW=1
-  rm -rf "$EXT_DIR"
-  mkdir -p "$EXT_DIR"
-  cp "$SRC/data/gnome-shell/$EXT_UUID"/* "$EXT_DIR/"
+install_ext() {   # uuid
+  local dir="$PREFIX/gnome-shell/extensions/$1" enabled newlist
+  [ -d "$dir" ] || EXT_NEW=1
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  cp "$SRC/data/gnome-shell/$1"/* "$dir/"
   enabled=$(gsettings get org.gnome.shell enabled-extensions)
-  newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); u=sys.argv[2]; print(v if u in v else v+[u])" "$enabled" "$EXT_UUID")
+  newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); u=sys.argv[2]; print(v if u in v else v+[u])" "$enabled" "$1")
   gsettings set org.gnome.shell enabled-extensions "$newlist"
-  gnome-extensions enable "$EXT_UUID" >/dev/null 2>&1 || true
-  if [ "$(gsettings get org.gnome.shell disable-user-extensions)" = "true" ]; then
-    warn "User extensions are switched off in GNOME; turn them on in the Extensions app for clipboard history"
+  gnome-extensions enable "$1" >/dev/null 2>&1 || true
+}
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] && command -v gsettings >/dev/null; then
+  if [ "${KALULU_CLIPBOARD:-on}" != "off" ]; then
+    install_ext "$EXT_UUID"
+    ok "Clipboard extension installed ($EXT_UUID)"
   fi
-  ok "Clipboard extension installed ($EXT_UUID)"
+  if [ "${KALULU_LOCKSCREEN:-on}" != "off" ]; then
+    install_ext "$LOCK_UUID"
+    ok "Lock screen extension installed ($LOCK_UUID)"
+    say "Preparing the lock screen's depth effect (one-off download, about 60 MB)"
+    "$BIN/kalulu" --lockscreen-setup || warn "Depth effect unavailable for now; the lock screen still works"
+  fi
+  if [ "$(gsettings get org.gnome.shell disable-user-extensions)" = "true" ]; then
+    warn "User extensions are switched off in GNOME; turn them on in the Extensions app"
+  fi
 fi
 
 # ---------------------------------------------------------------- hotkey
@@ -162,6 +179,6 @@ sleep 0.3
 setsid -f "$BIN/kalulu" --background >/dev/null 2>&1 < /dev/null
 ok "Kalulu is running. Press ${HOTKEY/none/your hotkey} to open it."
 if [ "$EXT_NEW" = 1 ]; then
-  say "Log out and back in once so GNOME loads the clipboard extension (Wayland can't reload the Shell live)."
+  say "Log out and back in once so GNOME loads Kalulu's Shell extensions (Wayland can't reload the Shell live)."
 fi
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "$BIN is not on your PATH; add it to use 'kalulu' from a terminal";; esac

@@ -26,6 +26,7 @@ class Context:
     config_error: str | None = None
     engine: "Engine | None" = None
     clips: "ClipStore | None" = None
+    lockscreen: object = None          # LockscreenService, set by the app (absent in tests)
 
 
 def _clip_settings(cfg: dict) -> tuple[bool, int, int]:
@@ -62,6 +63,8 @@ class Engine:
         if err:
             log.warning(err)
         c = self.ctx
+        if c.lockscreen is not None:
+            c.lockscreen.schedule()            # prefs may have changed
         enabled, max_items, keep_days = _clip_settings(cfg)
         if enabled and c.clips is None:
             try:

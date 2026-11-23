@@ -128,6 +128,20 @@ class KaluluCommandsProvider(Provider):
     name = "kalulu"
     weight = 10.0
 
+    def _refresh_lockscreen(self):
+        svc = self.ctx.lockscreen
+        if svc is None:
+            return "Lock screen service isn't running"
+        import threading
+        done = threading.Event()
+        svc.refresh(force=True, done=lambda _m: done.set())
+        done.wait(240)                          # we're on a worker thread; the toast waits for the result
+        from ..lockscreen import read_meta
+        m = read_meta()
+        if m.get("subject"):
+            return "Lock screen updated · depth effect on"
+        return f"Lock screen updated · no depth effect ({m.get('reason') or 'off'})"
+
     def items(self) -> list[Result]:
         cfg = str(paths.CONFIG_FILE)
         return [
@@ -139,6 +153,12 @@ class KaluluCommandsProvider(Provider):
                    icon="edit-paste-symbolic", category="Kalulu",
                    keywords=["clip", "clipboard", "paste", "copied", "history"],
                    actions=[Action("Open Clipboard History", "complete", "clip ", close=False)]),
+            Result(id="kalulu:lockscreen", title="Refresh Lock Screen", subtitle="Re-cut the wallpaper and update the weather",
+                   icon="system-lock-screen-symbolic", category="Kalulu",
+                   keywords=["lockscreen", "lock screen", "wallpaper", "depth", "clock"],
+                   actions=[Action("Refresh", "callback", self._refresh_lockscreen, close=False),
+                            Action("Lock Screen Settings", "open_uri", cfg),
+                            Action("Lock Now to Preview", "run", ["loginctl", "lock-session"])]),
             Result(id="kalulu:reload", title="Reload Kalulu", subtitle="Re-read config, apps, scripts and plugins",
                    icon="view-refresh-symbolic", category="Kalulu", keywords=["refresh"],
                    actions=[Action("Reload", "internal", "reload", close=False)]),
@@ -162,7 +182,7 @@ _PANELS = [
     ("sound", "Sound", "audio-speakers-symbolic", "volume microphone output input"),
     ("power", "Power", "battery-symbolic", "battery suspend performance"),
     ("multitasking", "Multitasking", "view-grid-symbolic", "workspaces hot corner"),
-    ("background", "Appearance", "preferences-desktop-wallpaper-symbolic", "wallpaper background dark style"),
+    ("background", "Appearance", "preferences-desktop-wallpaper-symbolic", "wallpaper background style theme"),
     ("ubuntu", "Ubuntu Desktop", "start-here-symbolic", "dock accent color"),
     ("notifications", "Notifications", "preferences-system-notifications-symbolic", "alerts banners"),
     ("search", "Search", "system-search-symbolic", "search providers"),
