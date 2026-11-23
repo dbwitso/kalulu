@@ -103,6 +103,18 @@ class SystemCommandsProvider(Provider):
             _cmd("sysmon", "System Monitor", "Processes & resources", "utilities-system-monitor-symbolic",
                  [Action("Open", "run", ["gnome-system-monitor"])], ["task manager", "processes", "htop"]),
         ]
+        upd = []
+        if _have("apt"):
+            upd.append("sudo apt update && sudo apt full-upgrade")
+        if _have("snap"):
+            upd.append("sudo snap refresh")
+        if _have("flatpak"):
+            upd.append("flatpak update")
+        if upd:
+            r.append(_cmd("update", "Update All Software", " · ".join(x.split()[1] if x.startswith("sudo") else x.split()[0] for x in upd),
+                          "software-update-available-symbolic",
+                          [Action("Update in Terminal", "terminal", " ; ".join(upd))],
+                          ["upgrade", "apt upgrade", "snap refresh", "updates"]))
         if _have("nmcli"):
             r.append(_cmd("wifi", "Toggle Wi-Fi", "Network", "network-wireless-symbolic",
                           [Action("Toggle", "callback", toggle_wifi, close=False)], ["wireless", "network"]))
@@ -136,3 +148,40 @@ class KaluluCommandsProvider(Provider):
                    icon="application-exit-symbolic", category="Kalulu",
                    actions=[Action("Quit", "internal", "quit")]),
         ]
+
+
+_PANELS = [
+    ("wifi", "Wi-Fi", "network-wireless-symbolic", "wireless internet hotspot"),
+    ("network", "Network", "network-wired-symbolic", "ethernet vpn proxy"),
+    ("bluetooth", "Bluetooth", "bluetooth-active-symbolic", "pair devices headphones"),
+    ("display", "Displays", "video-display-symbolic", "monitor resolution scale refresh rate"),
+    ("sound", "Sound", "audio-speakers-symbolic", "volume microphone output input"),
+    ("power", "Power", "battery-symbolic", "battery suspend performance"),
+    ("multitasking", "Multitasking", "view-grid-symbolic", "workspaces hot corner"),
+    ("background", "Appearance", "preferences-desktop-wallpaper-symbolic", "wallpaper background dark style"),
+    ("ubuntu", "Ubuntu Desktop", "start-here-symbolic", "dock accent color"),
+    ("notifications", "Notifications", "preferences-system-notifications-symbolic", "alerts banners"),
+    ("search", "Search", "system-search-symbolic", "search providers"),
+    ("applications", "Apps", "view-app-grid-symbolic", "default apps permissions"),
+    ("privacy", "Privacy & Security", "preferences-system-privacy-symbolic", "location camera screen lock"),
+    ("online-accounts", "Online Accounts", "goa-panel-symbolic", "google microsoft nextcloud"),
+    ("sharing", "Sharing", "preferences-system-sharing-symbolic", "remote desktop file sharing"),
+    ("mouse", "Mouse & Touchpad", "input-mouse-symbolic", "pointer scroll speed tap"),
+    ("keyboard", "Keyboard", "input-keyboard-symbolic", "shortcuts layout input source"),
+    ("color", "Color", "preferences-color-symbolic", "color profile calibration"),
+    ("printers", "Printers", "printer-symbolic", "print scanner"),
+    ("system", "System", "preferences-system-symbolic", "about users date time region language updates"),
+]
+
+
+class SettingsPanelsProvider(Provider):
+    name = "settings-panels"
+    weight = 15.0
+
+    def items(self) -> list[Result]:
+        if not _have("gnome-control-center"):
+            return []
+        return [Result(id=f"panel:{pid}", title=f"{title} Settings", subtitle="Settings",
+                       icon=icon, category="Settings", keywords=kw.split() + [title.lower()],
+                       actions=[Action("Open", "run", ["gnome-control-center", pid])])
+                for pid, title, icon, kw in _PANELS]

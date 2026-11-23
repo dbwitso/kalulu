@@ -169,6 +169,9 @@ class AppsProvider(Provider):
                 actions.append(Action(act_name, "launch_app",
                                       {"path": e.path, "action": act_id, "exec": act_exec,
                                        "terminal": e.terminal}))
+            actions.append(Action("Uninstall…", "callback",
+                                  (lambda t=e.name, p=e.path: __import__("kalulu.providers.packages", fromlist=["x"])
+                                   .uninstall_app(t, p)), confirm=True, close=False))
             actions.append(Action("Copy Desktop File Path", "copy", e.path))
             actions.append(Action("Show Desktop File", "reveal", e.path))
             kws = list(e.keywords)

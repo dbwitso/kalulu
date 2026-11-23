@@ -35,7 +35,7 @@ def _pretty(p: Path) -> str:
     return "~" + s[len(home):] if s.startswith(home) else s
 
 
-def file_result(p: Path, score: float) -> Result:
+def file_result(p: Path, score: float, in_content: bool = False) -> Result:
     path = str(p)
     parent = str(p.parent)
     actions = [
@@ -46,7 +46,8 @@ def file_result(p: Path, score: float) -> Result:
     ]
     if p.is_dir():
         actions.insert(1, Action("Browse in Kalulu", "complete", _pretty(p).rstrip("/") + "/", close=False))
-    return Result(id=f"file:{path}", title=p.name or path, subtitle=_pretty(p.parent),
+    sub = _pretty(p.parent) + ("  ·  matches inside" if in_content else "")
+    return Result(id=f"file:{path}", title=p.name or path, subtitle=sub,
                   icon=_icon_for(p), category="Folder" if p.is_dir() else "File",
                   actions=actions, score=score)
 
@@ -62,7 +63,11 @@ class FilesProvider(Provider):
         term = text[2:].strip()
         if len(term) < 2:
             return []
-        return [file_result(p, fuzzy.score(term, p.name) or 1) for p in self._search(term)][:40]
+        out = []
+        for p, in_content in self._search(term):
+            s = fuzzy.score(term, p.name)
+            out.append(file_result(p, (s or 150) + (0 if in_content else 50), in_content))
+        return out[:40]
 
     # -- path browsing -------------------------------------------------
     def _browse(self, text: str) -> list[Result]:
@@ -98,8 +103,18 @@ class FilesProvider(Provider):
         roots = self.ctx.config.get("files", {}).get("roots", ["~"])
         return [os.path.expanduser(r) for r in roots]
 
-    def _search(self, term: str) -> list[Path]:
+    def _search(self, term: str, walk: bool = True, budget: float = 0.6) -> list[tuple[Path, bool]]:
+        from . import localindex
         roots = self._roots()
+        hits = [(Path(p), c) for p, c in (localindex.search(term) or []) if Path(p).exists()]
+        if len(hits) >= 15:
+            return hits
+        # the index only covers what GNOME indexes (XDG folders by default): top up from fd/plocate
+        seen = {p for p, _ in hits}
+        hits += [(p, False) for p in self._search_tools(term, roots, walk, budget) if p not in seen]
+        return hits
+
+    def _search_tools(self, term: str, roots: list[str], walk: bool, budget: float = 0.6) -> list[Path]:
         fd = shutil.which("fd") or shutil.which("fdfind")
         try:
             if fd:
@@ -115,7 +130,7 @@ class FilesProvider(Provider):
                     return paths[:60]
         except (subprocess.SubprocessError, OSError):
             pass
-        return self._walk(term, roots)
+        return self._walk(term, roots, budget) if walk else []
 
     def _walk(self, term: str, roots: list[str], budget: float = 0.6) -> list[Path]:
         deadline = time.monotonic() + budget
@@ -134,3 +149,29 @@ class FilesProvider(Provider):
                     if t in n.lower():
                         found.append(Path(dirpath) / n)
         return found
+
+
+class BlendedFilesProvider(FilesProvider):
+    """Top file matches mixed into normal search (no prefix needed): index, then fd/plocate, then a short walk."""
+
+    name = "files-blended"
+    prefixes = ()
+    min_len = 3
+    delay_ms = 180
+    weight = -120.0       # apps and commands stay above files
+
+    def items(self):
+        return []
+
+    def query(self, text: str) -> list[Result]:
+        t = text.strip()
+        if t.startswith(("/", "~", ">", ":", "?", "f ")) or len(t) < 3:
+            return []
+        out = []
+        for p, in_content in self._search(t, walk=True, budget=0.25)[:30]:
+            s = fuzzy.score(t, p.name)
+            if s is None and not in_content:
+                continue
+            out.append(file_result(p, (s or 300) - (80 if in_content else 0), in_content))
+        out.sort(key=lambda r: -r.score)
+        return out[:6]

@@ -117,6 +117,88 @@ def test_frecency_learning():
     assert E.home()[0].title == "Files"
 
 
+# ---------------------------------------------------------------- v0.2: inline answers, packages, settings
+def _fake_bin(name, body):
+    d = TMP / "fakebin"
+    d.mkdir(exist_ok=True)
+    (d / name).write_text("#!/bin/sh\n" + body)
+    (d / name).chmod(0o755)
+    os.environ["PATH"] = f"{d}:{os.environ['PATH']}"
+
+
+def test_knowledge_inline():
+    from kalulu.providers import knowledge
+    canned = {
+        "search/title": {"pages": [{"key": "Lusaka", "title": "Lusaka", "description": "Capital city of Zambia"},
+                                   {"key": "Lusaka_Province", "title": "Lusaka Province", "description": "Province"}]},
+        "page/summary": {"title": "Lusaka", "description": "Capital city of Zambia",
+                         "extract": "Lusaka is the capital and largest city of Zambia."},
+        "duckduckgo": {"Heading": "Lusaka", "AbstractText": "Lusaka is the capital of Zambia.",
+                       "AbstractSource": "Wikipedia", "AbstractURL": "https://en.wikipedia.org/wiki/Lusaka"},
+        "dictionaryapi": [{"word": "kalulu", "phonetic": "/ka'lu:lu/", "meanings": [
+            {"partOfSpeech": "noun", "definitions": [{"definition": "A hare, the clever trickster of folk tales."}]}]}],
+    }
+    knowledge.http_json = lambda url, timeout=3.5: next((v for k, v in canned.items() if k in url), None)
+    blended = E.search("lusaka", slow=True)
+    wiki = [r for r in blended if r.category == "Wikipedia"]
+    assert [r.title for r in wiki] == ["Lusaka", "Lusaka Province"], blended
+    kind, text = E.execute(wiki[0].primary)
+    assert kind == "detail" and "largest city of Zambia" in text["body"] and "Wikipedia" in text["source"]
+    ask = E.search("? lusaka", slow=True)
+    assert ask[0].category == "Answer" and "capital of Zambia" in ask[0].title
+    assert all(r.category in ("Answer", "Wikipedia") for r in ask)
+    d = E.search("define kalulu", slow=True)
+    assert d[0].category == "Define" and "hare" in d[0].title
+    # apps still beat Wikipedia when both match
+    mixed = E.search("files", slow=False) + E.search("files", slow=True)
+    from kalulu.core.engine import dedupe_sort
+    assert dedupe_sort(mixed)[0].title == "Files"
+
+
+def test_install_search():
+    _fake_bin("snap", """
+case "$1" in
+  find) printf 'Name     Version  Publisher     Notes    Summary\\nhtop     3.3.0    maxiberta     -        Interactive processes viewer\\ncode     1.95     vscode**      classic  Code editing. Redefined.\\n';;
+  list) printf 'Name Version Rev\\ncore22 1 1\\n';;
+esac""")
+    _fake_bin("flatpak", """
+case "$1" in
+  search) printf 'htop\\tio.htop.Htop\\t3.3.0\\tflathub\\tProcess viewer\\n';;
+  list) printf 'org.gnome.Calculator\\n';;
+esac""")
+    res = E.search("install htop", slow=True)
+    srcs = {r.category.split(" ")[0] for r in res}
+    assert {"APT", "Snap", "Flatpak"} <= srcs, [(r.title, r.category) for r in res]
+    snap_code = next(r for r in E.search("install code", slow=True) if r.id == "pkg:snap:code")
+    assert snap_code.primary.payload["argv"] == ["snap", "install", "code", "--classic"]
+    apt = next(r for r in res if r.category.startswith("APT") and r.title == "htop")
+    assert apt.primary.payload["argv"][:2] == ["pkexec", "env"]
+    assert apt.actions[1].payload == "sudo apt install htop"
+    # an installed apt package offers removal, not install
+    installed = next((r for r in E.search("install coreutils", slow=True) if r.id == "pkg:apt:coreutils"), None)
+    assert installed and "Installed" in installed.category and installed.actions[1].confirm
+
+
+def test_uninstall_and_sources():
+    from kalulu.providers.packages import source_of_desktop_file
+    res = E.search("uninstall firefox", slow=True)
+    assert res and res[0].title == "Uninstall Firefox Web Browser" and res[0].primary.confirm
+    assert source_of_desktop_file("/var/lib/snapd/desktop/applications/firefox_firefox.desktop") == ("snap", "firefox")
+    assert source_of_desktop_file("/var/lib/flatpak/exports/share/applications/org.gimp.GIMP.desktop") == ("flatpak", "org.gimp.GIMP")
+    real = next(Path("/usr/share/applications").glob("*.desktop"), None)
+    if real:
+        src = source_of_desktop_file(str(real))
+        assert src and src[0] == "apt", src
+
+
+def test_settings_panels():
+    _fake_bin("gnome-control-center", "true")
+    E.reload()
+    assert titles("bluetooth")[0] in ("Bluetooth Settings", "Toggle Bluetooth")
+    assert titles("resolution")[0] == "Displays Settings"
+    assert "Update All Software" in titles("upgrade")
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

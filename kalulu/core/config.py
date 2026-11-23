@@ -20,6 +20,13 @@ terminal = "auto"
 # {query} is replaced with the URL-encoded search text
 search_url = "https://www.google.com/search?q={query}"
 search_name = "Google"
+# Show Wikipedia matches under local results as you type, and enable "? question" / "define word"
+inline_answers = true
+language = "en"
+
+[packages]
+# Sources searched by "install <name>"
+sources = ["apt", "snap", "flatpak"]
 
 [files]
 # Folders searched by "f <name>" (when fd/plocate are not installed)

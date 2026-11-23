@@ -15,6 +15,8 @@ class Provider:
     slow = False
     weight = 0.0          # added to every score from this provider
     prefixes: tuple[str, ...] = ()   # if set, only runs when the query starts with one
+    delay_ms = 120        # debounce for slow providers
+    min_len = 1           # slow providers skip shorter queries
 
     def __init__(self, ctx):
         self.ctx = ctx

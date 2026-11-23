@@ -84,7 +84,9 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.results: list[Result] = []
         self.fast_results: list[Result] = []
         self.generation = 0
-        self.slow_timer = 0
+        self.slow_timers: list[int] = []
+        self.slow_acc: list[Result] = []
+        self.slow_pending = 0
         self.mode = "search"              # search | actions | detail
         self.action_owner: Result | None = None
         self.pending_confirm: tuple | None = None
@@ -229,13 +231,20 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.fast_results = self.engine.search(text)
         self._set_results(self.fast_results, keep_selection=False)
         self._update_mode_icon(text)
-        if self.slow_timer:
-            GLib.source_remove(self.slow_timer)
-            self.slow_timer = 0
-        if text.strip() and any(p.slow for p in self.engine._active(text)):
+        for t in self.slow_timers:
+            if not t[1]:
+                GLib.source_remove(t[0])
+        self.slow_timers = []
+        self.slow_acc = []
+        providers = self.engine.slow_providers(text)
+        self.slow_pending = len(providers)
+        if providers:
             self.spinner.start()
             gen = self.generation
-            self.slow_timer = GLib.timeout_add(SLOW_DEBOUNCE_MS, self._start_slow, text, gen)
+            for p in providers:
+                slot = [0, False]
+                slot[0] = GLib.timeout_add(p.delay_ms, self._start_slow, p, text, gen, slot)
+                self.slow_timers.append(slot)
         else:
             self.spinner.stop()
 
@@ -247,33 +256,46 @@ class LauncherWindow(Adw.ApplicationWindow):
             name = "face-smile-symbolic"
         elif text.startswith(("/", "~", "f ")):
             name = "folder-symbolic"
+        elif text.startswith("?") or text.startswith("define "):
+            name = "dialog-question-symbolic"
+        elif text.startswith(("install ", "uninstall ", "remove ")):
+            name = "system-software-install-symbolic"
         self.mode_icon.set_from_icon_name(name)
 
-    def _start_slow(self, text, gen):
-        self.slow_timer = 0
-
+    def _start_slow(self, provider, text, gen, slot):
+        slot[1] = True
         def work():
             try:
-                res = self.engine.search(text, slow=True)
+                res = self.engine.search_one(provider, text)
             except Exception:
-                log.exception("slow search failed")
+                log.exception("slow provider %s failed", provider.name)
                 res = []
             GLib.idle_add(self._slow_done, res, gen)
 
-        threading.Thread(target=work, daemon=True).start()
+        if gen == self.generation:
+            threading.Thread(target=work, daemon=True).start()
         return False
 
     def _slow_done(self, res, gen):
         if gen != self.generation or self.mode != "search":
             return False
-        self.spinner.stop()
+        self.slow_pending -= 1
+        if self.slow_pending <= 0:
+            self.spinner.stop()
         if res:
-            self._set_results(dedupe_sort(self.fast_results + res), keep_selection=True)
+            self.slow_acc += res
+            self._set_results(dedupe_sort(self.fast_results + self.slow_acc), keep_selection=True)
+        elif self.slow_pending <= 0 and not self.results and self.entry.get_text().strip():
+            self.stack.set_visible_child_name("empty")
         return False
 
     def _set_results(self, results: list[Result], keep_selection: bool, is_action: bool = False):
-        prev = self.selected_index() if keep_selection else 0
-        limit = 60 if is_action or self.entry.get_text().startswith(("/", "~", ":", "f ")) else 40
+        prev = 0
+        if keep_selection and self.results:
+            cur = self.selected_result()
+            ids = [r.id for r in results]
+            prev = ids.index(cur.id) if cur and cur.id in ids and self.selected_index() > 0 else 0
+        limit = 60 if is_action or self.entry.get_text().startswith(("/", "~", ":", "f ", "install ")) else 40
         self.results = results[:limit]
         self.listbox.remove_all()
         for i, r in enumerate(self.results):
@@ -287,7 +309,7 @@ class LauncherWindow(Adw.ApplicationWindow):
         if self.results:
             self.stack.set_visible_child_name("list")
             self.select(min(prev, len(self.results) - 1))
-        elif self.entry.get_text().strip():
+        elif self.entry.get_text().strip() and not self.slow_pending:
             self.stack.set_visible_child_name("empty")
             self.primary_label.set_label("")
 
@@ -462,12 +484,39 @@ class LauncherWindow(Adw.ApplicationWindow):
 
         threading.Thread(target=work, daemon=True).start()
 
-    def show_detail(self, text: str):
+    def show_detail(self, content):
+        """content: plain text (script output, monospace) or a dict {title, subtitle, body, source} (prose)."""
         self.mode = "detail"
-        self.detail.get_buffer().set_text(text)
+        buf = self.detail.get_buffer()
+        buf.set_text("")
+        if isinstance(content, dict):
+            self.detail.set_monospace(False)
+            self.detail.add_css_class("kalulu-prose")
+            tags = self._detail_tags(buf)
+            end = buf.get_end_iter
+            buf.insert_with_tags(end(), content.get("title", "") + "\n", tags["title"])
+            if content.get("subtitle"):
+                buf.insert_with_tags(end(), content["subtitle"] + "\n", tags["dim"])
+            buf.insert(end(), "\n" + content.get("body", "") + "\n")
+            if content.get("source"):
+                buf.insert_with_tags(end(), "\n" + content["source"], tags["small"])
+            text = f"{content.get('title', '')}\n\n{content.get('body', '')}"
+        else:
+            self.detail.set_monospace(True)
+            self.detail.remove_css_class("kalulu-prose")
+            buf.set_text(content)
+            text = content
         self.stack.set_visible_child_name("detail")
         self.primary_label.set_label("Back: Esc ·  Copy")
         self._detail_text = text
+
+    def _detail_tags(self, buf):
+        table = buf.get_tag_table()
+        if not table.lookup("k-title"):
+            buf.create_tag("k-title", weight=700, scale=1.5, pixels_below_lines=2)
+            buf.create_tag("k-dim", style=2)
+            buf.create_tag("k-small", scale=0.85, style=2)
+        return {"title": table.lookup("k-title"), "dim": table.lookup("k-dim"), "small": table.lookup("k-small")}
 
     def copy(self, text: str):
         clip = Gdk.Display.get_default().get_clipboard()

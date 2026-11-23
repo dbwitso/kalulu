@@ -97,3 +97,9 @@ listbox.kalulu-list > row:hover:not(:selected) {
   font-size: 26px;
   font-weight: 700;
 }
+
+textview.kalulu-prose {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 16px 22px;
+}
