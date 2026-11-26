@@ -8,7 +8,7 @@ from pathlib import Path
 TMP = Path(tempfile.mkdtemp())
 os.environ.update(HOME=str(TMP), XDG_CONFIG_HOME=str(TMP / "cfg"), XDG_STATE_HOME=str(TMP / "state"),
                   XDG_DATA_HOME=str(TMP / "data"), XDG_DATA_DIRS=str(TMP / "sys"),
-                  XDG_CURRENT_DESKTOP="ubuntu:GNOME", LANG="en_US.UTF-8")
+                  XDG_CURRENT_DESKTOP="ubuntu:GNOME", LANG="en_US.UTF-8", KALULU_NO_SHELL="1")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 apps = TMP / "sys/applications"
@@ -356,6 +356,111 @@ def test_background_runner_cancels_and_deprioritises():
     nice = r.run("n", ["sh", "-c", "cat /proc/self/stat"]).split(")")[1].split()[16]
     assert int(nice) >= 15                                        # helpers run at low CPU priority
     assert r.run("t", ["sh", "-c", "sleep 2"], timeout=0.2) is None
+
+
+
+# ---------------------------------------------------------------- v0.7: windows (Kalulu Windows extension)
+class FakeWindows:
+    """Stands in for the dev.kalulu.Windows D-Bus service."""
+
+    def __init__(self):
+        self.calls = []
+        self.data = {"workspace": 0, "monitors": 1, "windows": [
+            {"id": 11, "title": "kalulu — ~/Projects", "app_id": "org.gnome.Terminal.desktop",
+             "app_name": "Terminal", "icon": "org.gnome.Terminal", "workspace": 0, "minimized": False, "last": True},
+            {"id": 12, "title": "Budget 2026.xlsx — LibreOffice Calc", "app_id": "libreoffice-calc.desktop",
+             "app_name": "LibreOffice Calc", "icon": "", "workspace": 1, "minimized": True, "last": False},
+            {"id": 13, "title": "Downloads", "app_id": "org.gnome.Nautilus.desktop", "app_name": "Files",
+             "icon": "org.gnome.Nautilus", "workspace": 0, "minimized": False, "last": False},
+        ]}
+
+    def list(self):
+        return self.data
+
+    def available(self):
+        return True
+
+    def windows(self):
+        return self.data["windows"]
+
+    def activate(self, wid):
+        self.calls.append(("activate", wid))
+        return True
+
+    def close(self, wid):
+        self.calls.append(("close", wid))
+        return True
+
+    def minimize(self, wid):
+        self.calls.append(("minimize", wid))
+        return True
+
+    def quit_app(self, wid):
+        self.calls.append(("quit", wid))
+        return True
+
+    def tile(self, layout, wid=0):
+        self.calls.append(("tile", layout, wid))
+        return ""
+
+
+def test_windows_switcher_and_tiling():
+    fake = FakeWindows()
+    E.ctx.windows = fake
+    E.reload()
+    res = E.search("w ")
+    assert [r.title for r in res][:3] == ["kalulu — ~/Projects", "Budget 2026.xlsx — LibreOffice Calc", "Downloads"]
+    calc = next(r for r in res if r.id == "win:12")
+    assert "Workspace 2" in calc.subtitle and "minimised" in calc.subtitle
+    assert E.search("w budget")[0].id == "win:12"
+    assert all(r.category == "Window" for r in E.search("w "))           # exclusive mode
+    E.execute(E.search("w budget")[0].primary)
+    assert fake.calls[-1] == ("activate", 12)
+    # blended: a matching window shows up below apps, never above
+    blended = E.search("budget 2026")
+    assert any(r.id == "win:12" for r in blended)
+    # tiling commands act on the previous window (id 0 = "the one you were using")
+    left = E.search("left half")[0]
+    assert left.id == "tile:left-half" and "Ctrl Super" in left.subtitle
+    E.execute(left.primary)
+    assert fake.calls[-1] == ("tile", "left-half", 0)
+    assert E.search("next display")[0].id == "tile:next-display"
+    assert E.search("centre window")[0].id == "tile:center"
+    assert E.search("snap")[0].id.startswith("tile:")
+    # per-window tiling from the action panel targets that window
+    term = E.search("w kalulu")[0]
+    move_left = next(a for a in term.actions if a.title == "Move to Left Half")
+    E.execute(move_left)
+    assert fake.calls[-1] == ("tile", "left-half", 11)
+
+
+def test_running_apps_switch_instead_of_launching():
+    fake = FakeWindows()
+    E.ctx.windows = fake
+    files = next(r for r in E.search("files") if r.id.startswith("app:"))
+    assert files.category == "Running" and files.primary.title == "Switch to Window"
+    assert files.actions[1].title == "Open New Window" and files.actions[1].kind == "launch_app"
+    E.execute(files.primary)
+    assert fake.calls[-1] == ("activate", 13)
+    ff = next(r for r in E.search("firefox") if r.id.startswith("app:"))
+    assert ff.primary.title == "Open Application"                        # not running: unchanged
+    E.ctx.config["windows"]["switch_to_running"] = False
+    assert next(r for r in E.search("files") if r.id.startswith("app:")).primary.title == "Open Application"
+    E.ctx.config["windows"]["switch_to_running"] = True
+
+
+def test_windows_without_extension():
+    from kalulu.core.shellwin import WindowsBridge, settings_from_config
+    E.ctx.windows = None
+    assert not any(r.id.startswith("tile:") for r in E.search("left half"))
+    assert E.search("w ")[0].id == "win:missing"
+    b = WindowsBridge()
+    b._call = lambda *a, **k: None                                       # extension absent
+    assert b.list() is None and not b.available()
+    assert "Kalulu Windows extension" in b.tile("left-half")
+    s = settings_from_config({"windows": {"gap": 999, "hotkeys": False, "keys": {"left-half": "<Super><Alt>Left",
+                                                                               "bogus": "x"}}})
+    assert s["gap"] == 64 and s["hotkeys-enabled"] is False and s["keys"] == {"left-half": "<Super><Alt>Left"}
 
 
 if __name__ == "__main__":

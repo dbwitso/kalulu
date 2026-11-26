@@ -1,0 +1,9 @@
+{
+  "uuid": "kalulu-windows@kalulu.dev",
+  "name": "Kalulu Windows",
+  "description": "Window switching and keyboard tiling (halves, thirds, quarters, centre, next display) for the Kalulu launcher. Also works on its own via hotkeys.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.kalulu-windows",
+  "url": "https://github.com/dbwitso/kalulu",
+  "version": 1
+}

@@ -93,9 +93,45 @@ from kalulu.app import KaluluApp  # noqa: E402
 OUT.mkdir(parents=True, exist_ok=True)
 app = KaluluApp()
 suffix = "-dark" if os.environ.get("KALULU_DARK") else ""
+# KALULU_SHOTS=windows,tiling,running regenerates just those (others are skipped, not overwritten)
+ONLY = {x for x in os.environ.get("KALULU_SHOTS", "").split(",") if x}
+
+
+class DemoWindows:
+    """Stand-in for the Kalulu Windows Shell extension, with a believable desktop."""
+
+    def __init__(self):
+        self.data = {"workspace": 0, "monitors": 2, "windows": [
+            {"id": 21, "title": "kalulu — ~/Projects/kalulu", "app_id": "org.gnome.Terminal.desktop",
+             "app_name": "Terminal", "icon": "org.gnome.Terminal", "workspace": 0, "minimized": False},
+            {"id": 22, "title": "Budget 2026.xlsx — LibreOffice Calc", "app_id": "libreoffice-calc.desktop",
+             "app_name": "LibreOffice Calc", "icon": "libreoffice-calc", "workspace": 0, "minimized": False},
+            {"id": 23, "title": "Downloads", "app_id": "org.gnome.Nautilus.desktop", "app_name": "Files",
+             "icon": "org.gnome.Nautilus", "workspace": 0, "minimized": False},
+            {"id": 24, "title": "notes.md", "app_id": "org.gnome.TextEditor.desktop", "app_name": "Text Editor",
+             "icon": "org.gnome.TextEditor", "workspace": 1, "minimized": False},
+            {"id": 25, "title": "Clocks", "app_id": "org.gnome.clocks.desktop", "app_name": "Clocks",
+             "icon": "org.gnome.clocks", "workspace": 0, "minimized": True},
+        ]}
+
+    def list(self):
+        return self.data
+
+    def available(self):
+        return True
+
+    def windows(self):
+        return self.data["windows"]
+
+    def tile(self, layout, wid=0):
+        return ""
+
+    activate = close = minimize = quit_app = lambda self, wid: True
 
 
 def shot(name):
+    if ONLY and name not in ONLY:
+        return
     w = app.win
     wd, ht = w.get_width(), w.get_height()
     p = Gtk.WidgetPaintable.new(w)
@@ -151,6 +187,13 @@ def steps():
     yield lambda: shot("emoji")
     yield lambda: w.reset("display")
     yield lambda: shot("settings")
+    yield lambda: setattr(app.engine.ctx, "windows", DemoWindows())
+    yield lambda: w.reset("w ")
+    yield lambda: shot("windows")
+    yield lambda: w.reset("tile")
+    yield lambda: shot("tiling")
+    yield lambda: w.reset("files")
+    yield lambda: shot("running")
     yield lambda: [app.engine.ctx.clips.add(t) for t in (
         "#e8590c", "~/Documents/Tupane/budget-forecast-q1.csv",
         "def handler(event):\n    return {\"ok\": True}\n",

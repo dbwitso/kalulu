@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.kalulu-windows" path="/org/gnome/shell/extensions/kalulu-windows/">
+    <key name="hotkeys-enabled" type="b">
+      <default>true</default>
+      <summary>Enable the tiling hotkeys</summary>
+    </key>
+    <key name="gap" type="i">
+      <range min="0" max="64"/>
+      <default>0</default>
+      <summary>Gap in pixels around tiled windows</summary>
+    </key>
+    <key name="cycle-sizes" type="b">
+      <default>true</default>
+      <summary>Repeating a half/third shortcut cycles 1/2 → 2/3 → 1/3</summary>
+    </key>
+    <key name="tile-left-half" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;Left']</default>
+      <summary>Left Half</summary>
+    </key>
+    <key name="tile-right-half" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;Right']</default>
+      <summary>Right Half</summary>
+    </key>
+    <key name="tile-top-half" type="as">
+      <default>[]</default>
+      <summary>Top Half</summary>
+    </key>
+    <key name="tile-bottom-half" type="as">
+      <default>[]</default>
+      <summary>Bottom Half</summary>
+    </key>
+    <key name="tile-maximize" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;Up']</default>
+      <summary>Maximize</summary>
+    </key>
+    <key name="tile-almost-maximize" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;Return']</default>
+      <summary>Almost Maximize</summary>
+    </key>
+    <key name="tile-center" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;c']</default>
+      <summary>Centre</summary>
+    </key>
+    <key name="tile-restore" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;Down']</default>
+      <summary>Restore</summary>
+    </key>
+    <key name="tile-top-left" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;u']</default>
+      <summary>Top Left Quarter</summary>
+    </key>
+    <key name="tile-top-right" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;i']</default>
+      <summary>Top Right Quarter</summary>
+    </key>
+    <key name="tile-bottom-left" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;j']</default>
+      <summary>Bottom Left Quarter</summary>
+    </key>
+    <key name="tile-bottom-right" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;k']</default>
+      <summary>Bottom Right Quarter</summary>
+    </key>
+    <key name="tile-first-third" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;d']</default>
+      <summary>First Third</summary>
+    </key>
+    <key name="tile-center-third" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;f']</default>
+      <summary>Centre Third</summary>
+    </key>
+    <key name="tile-last-third" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;g']</default>
+      <summary>Last Third</summary>
+    </key>
+    <key name="tile-first-two-thirds" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;e']</default>
+      <summary>First Two Thirds</summary>
+    </key>
+    <key name="tile-last-two-thirds" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;t']</default>
+      <summary>Last Two Thirds</summary>
+    </key>
+    <key name="tile-larger" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;equal']</default>
+      <summary>Make Larger</summary>
+    </key>
+    <key name="tile-smaller" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;minus']</default>
+      <summary>Make Smaller</summary>
+    </key>
+    <key name="tile-next-display" type="as">
+      <default>['&lt;Control&gt;&lt;Super&gt;n']</default>
+      <summary>Next Display</summary>
+    </key>
+  </schema>
+</schemalist>

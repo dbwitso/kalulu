@@ -86,6 +86,40 @@ clipboard each time you open it. On X11 it works without the extension.
 History lives in `~/.local/state/kalulu/clipboard.db`, readable only by you. Copies that password managers flag
 as secret are never stored. Tune `max_items` / `keep_days`, or turn it off, under `[clipboard]` in the config.
 
+### Switch and arrange windows
+
+Type `w ` to see every open window on every workspace, most recent first, and type to filter. ↵ switches to it,
+and Ctrl+K moves it to a half, maximises, minimises, closes it or quits the app. Matching windows also show up
+among normal results, and an app that's already open shows as **Running**: ↵ takes you to its window instead of
+starting a second copy, and **Open New Window** is right below it.
+
+<p align="center">
+  <img src="docs/screenshots/windows.png" width="49%" alt="Window switcher">
+  <img src="docs/screenshots/running.png" width="49%" alt="A running app switches to its window">
+</p>
+
+Arrange windows from the keyboard, Rectangle-style. In Kalulu, type `left half`, `centre`, `first third`,
+`next display` and so on. They act on the window you were using before you opened Kalulu. The same layouts also
+have hotkeys that work anywhere, even when Kalulu is closed:
+
+| Ctrl+Super + | Layout | | Ctrl+Super + | Layout |
+|---|---|---|---|---|
+| ← / → | Left / right half (press again: ⅔, then ⅓) | | D / F / G | First / centre / last third |
+| ↑ | Maximise | | E / T | First / last two thirds |
+| ↓ | Restore the size it had before | | U / I / J / K | Quarters (top-left, top-right, bottom-left, bottom-right) |
+| Enter | Almost maximise | | = / − | Larger / smaller |
+| C | Centre | | N | Move to the next display |
+
+<img src="docs/screenshots/tiling.png" width="70%" alt="Tiling commands">
+
+Set a `gap` around tiled windows, turn the hotkeys off, or change any shortcut under `[windows]` in the config;
+changes apply straight away. Ubuntu's own Super+arrow tiling keeps working alongside.
+
+Only the Shell can list and move other apps' windows on Wayland, so this also uses a companion extension
+(*Kalulu Windows*), installed by `install.sh`; log out and back in once after the first install. It publishes
+`dev.kalulu.Windows` on your session bus. Sandboxed (Flatpak) apps can't reach it, but other unsandboxed
+programs running as you can see window titles through it, much like they could already read your files.
+
 ### Glass across the whole desktop
 
 Frosted "Liquid Glass" with real background blur on the GNOME interface: the top bar, Ubuntu Dock, every menu
@@ -163,6 +197,8 @@ stock lock screen on any error, so unlocking never depends on it.
 | `> docker ps` | Shell: ↵ runs it in a terminal, Ctrl+↵ shows the output inside Kalulu |
 | `:party` | Emoji picker (copies) |
 | `clip `, `clip ssh` or Super+Shift+V | Clipboard history (kept across reboots) |
+| `w `, `w calc` | Switch to an open window (all workspaces) |
+| `left half`, `centre`, `first third`, `next display` | Arrange the window you were using (also Ctrl+Super hotkeys) |
 | `gh kalulu`, `yt …`, `maps …`, `pkg …` | Quicklinks (edit them in config) |
 | `github.com/dbwitso` | Opens the URL |
 | `kill chrome` | Process killer (example plugin) |
@@ -244,8 +280,8 @@ managers, which contact their own repositories.
 
 ## Not yet (good next steps)
 
-Clipboard history and window switching (GNOME doesn't let normal Wayland apps watch the clipboard or list
-windows; both need a small Shell extension), snippets/text expansion, a settings GUI.
+Quick Look previews (Space on a file), currency/unit/time-zone converters, an offline "Ask AI" backed by Ollama,
+snippets/text expansion, a settings GUI.
 
 ## Dev
 
@@ -254,4 +290,6 @@ python3 tests/test_core.py                               # engine tests, no disp
 PYTHONPATH=. python3 -m kalulu --show
 xvfb-run -a dbus-run-session python3 tests/screenshots.py docs/screenshots   # regenerate screenshots
 KALULU_DARK=1 xvfb-run -a dbus-run-session python3 tests/screenshots.py docs/screenshots
+KALULU_SHOTS=windows,tiling,running xvfb-run -a dbus-run-session python3 tests/screenshots.py docs/screenshots
+#   ↑ only the named screens; the rest are left alone
 ```

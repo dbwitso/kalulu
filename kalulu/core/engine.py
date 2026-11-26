@@ -27,6 +27,7 @@ class Context:
     engine: "Engine | None" = None
     clips: "ClipStore | None" = None
     lockscreen: object = None          # LockscreenService, set by the app (absent in tests)
+    windows: object = None             # WindowsBridge to the Kalulu Windows Shell extension
 
 
 def _clip_settings(cfg: dict) -> tuple[bool, int, int]:
@@ -54,6 +55,7 @@ class Engine:
         from ..providers.plugins import load_plugins
         from ..providers.scripts import ScriptsProvider
         from ..providers.web import QuicklinksProvider, WebProvider
+        from ..providers.windows import WindowSwitcherProvider, WindowsProvider
 
         cfg, err = config_mod.load()
         if self.ctx is None:
@@ -70,6 +72,14 @@ class Engine:
             write_state(cfg)                   # the Glass extension picks this up live
         except OSError:
             log.exception("couldn't write glass settings")
+        if c.windows is None and not os.environ.get("KALULU_NO_SHELL"):
+            from .shellwin import WindowsBridge
+            c.windows = WindowsBridge()
+        try:
+            from .shellwin import EXTENSION_UUID, apply_settings
+            apply_settings(cfg, paths.DATA_HOME / "gnome-shell/extensions" / EXTENSION_UUID / "schemas")
+        except Exception:
+            log.exception("couldn't apply window settings")
         enabled, max_items, keep_days = _clip_settings(cfg)
         if enabled and c.clips is None:
             try:
@@ -87,7 +97,9 @@ class Engine:
             CalculatorProvider(c), AppsProvider(c), ScriptsProvider(c), SystemCommandsProvider(c),
             SettingsPanelsProvider(c), KaluluCommandsProvider(c), QuicklinksProvider(c), FilesProvider(c),
             BlendedFilesProvider(c), PackagesProvider(c), KnowledgeProvider(c), DefineProvider(c),
-            ShellProvider(c), EmojiProvider(c), ClipboardProvider(c), *load_plugins(c), WebProvider(c),
+            ShellProvider(c), EmojiProvider(c), ClipboardProvider(c), WindowsProvider(c), WindowSwitcherProvider(c),
+            *load_plugins(c),
+            WebProvider(c),
         ]
 
     def refresh(self) -> None:
@@ -151,7 +163,17 @@ class Engine:
         for p in self._active(text):
             if not p.slow:
                 results += self.search_one(p, text)
-        return dedupe_sort(results)
+        return self._running(dedupe_sort(results))
+
+    def _running(self, results: list[Result]) -> list[Result]:
+        if not self.ctx.config.get("windows", {}).get("switch_to_running", True):
+            return results
+        from ..providers.windows import mark_running
+        try:
+            return mark_running(results, self.ctx.windows)
+        except Exception:
+            log.exception("running-app lookup failed")
+            return results
 
     def home(self) -> list[Result]:
         """Shown for an empty query: recently used, then a few handy commands."""
@@ -166,7 +188,7 @@ class Engine:
                 break
             if fallback in index and index[fallback] not in out:
                 out.append(index[fallback])
-        return out
+        return self._running(out)
 
     # ------------------------------------------------------------------
     def record(self, result: Result, query: str) -> None:

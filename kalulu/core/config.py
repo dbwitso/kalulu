@@ -37,6 +37,20 @@ max_items = 1000
 # Also drop unpinned entries older than this many days (0 = keep until max_items pushes them out)
 keep_days = 0
 
+[windows]
+# Window switching + tiling (needs the "Kalulu Windows" GNOME Shell extension, installed by install.sh).
+# Type "w " to switch windows, or "left half", "centre", "next display"… to arrange the window you were using.
+hotkeys = true            # Ctrl+Super + ←/→ halves (press again: 2/3, 1/3), ↑ maximise, ↓ restore, Enter almost
+                          # maximise, C centre, U/I/J/K quarters, D/F/G thirds, E/T two-thirds, =/- size, N next display
+gap = 0                   # pixels around tiled windows
+cycle_sizes = true
+switch_to_running = true  # app results focus the open window instead of starting another copy
+# Override any shortcut ("" turns it off). Layout names: left-half right-half top-half bottom-half maximize
+# almost-maximize center restore top-left top-right bottom-left bottom-right first-third center-third last-third
+# first-two-thirds last-two-thirds larger smaller next-display
+[windows.keys]
+# left-half = "<Super><Alt>Left"
+
 [glass]
 # Frosted "Liquid Glass" with real background blur across the GNOME interface, drawn by the
 # "Kalulu Glass" GNOME Shell extension (install.sh adds it). Changes apply as soon as you save.
