@@ -21,6 +21,7 @@ CLIP_HOTKEY="${KALULU_CLIP_HOTKEY:-<Super><Shift>v}"
 EXT_UUID="kalulu-clipboard@kalulu.dev"
 LOCK_UUID="kalulu-lockscreen@kalulu.dev"
 GLASS_UUID="kalulu-glass@kalulu.dev"
+WIN_UUID="kalulu-windows@kalulu.dev"
 KB_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu/"
 KB_CLIP_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kalulu-clipboard/"
 KB_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
@@ -129,14 +130,18 @@ ok "Example scripts → $CFG/scripts, plugins → $CFG/plugins"
 
 # ---------------------------------------------------------------- GNOME Shell extensions
 # Clipboard: GNOME on Wayland only lets the focused window see clipboard changes, so a tiny Shell
-# extension forwards each copy to Kalulu. Lock screen: only a Shell extension can draw on it.
+# extension forwards each copy to Kalulu. Windows: only the Shell may list and move other apps' windows.
+# Lock screen: only a Shell extension can draw on it.
 EXT_NEW=0
 install_ext() {   # uuid
   local dir="$PREFIX/gnome-shell/extensions/$1" enabled newlist
   [ -d "$dir" ] || EXT_NEW=1
   rm -rf "$dir"
   mkdir -p "$dir"
-  cp "$SRC/data/gnome-shell/$1"/* "$dir/"
+  cp -r "$SRC/data/gnome-shell/$1"/. "$dir/"
+  if [ -d "$dir/schemas" ]; then
+    glib-compile-schemas "$dir/schemas" 2>/dev/null || warn "Couldn't compile settings for $1 (is libglib2.0-bin installed?)"
+  fi
   enabled=$(gsettings get org.gnome.shell enabled-extensions)
   newlist=$("$PY" -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); u=sys.argv[2]; print(v if u in v else v+[u])" "$enabled" "$1")
   gsettings set org.gnome.shell enabled-extensions "$newlist"
@@ -150,6 +155,10 @@ if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] && command -v gsettings >/dev/nul
   if [ "${KALULU_GLASS:-on}" != "off" ]; then
     install_ext "$GLASS_UUID"
     ok "Glass theme extension installed ($GLASS_UUID); tune it under [glass] in config.toml"
+  fi
+  if [ "${KALULU_WINDOWS:-on}" != "off" ]; then
+    install_ext "$WIN_UUID"
+    ok "Window switching + tiling extension installed ($WIN_UUID); hotkeys are Ctrl+Super+arrows etc., see [windows] in config.toml"
   fi
   if [ "${KALULU_LOCKSCREEN:-on}" != "off" ]; then
     install_ext "$LOCK_UUID"

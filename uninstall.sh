@@ -10,6 +10,7 @@ KB_CLIP_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/k
 EXT_UUID="kalulu-clipboard@kalulu.dev"
 LOCK_UUID="kalulu-lockscreen@kalulu.dev"
 GLASS_UUID="kalulu-glass@kalulu.dev"
+WIN_UUID="kalulu-windows@kalulu.dev"
 
 "$HOME/.local/bin/kalulu" --quit >/dev/null 2>&1 || true
 
@@ -22,9 +23,10 @@ if command -v gsettings >/dev/null; then
   gnome-extensions disable "$EXT_UUID" >/dev/null 2>&1 || true
   gnome-extensions disable "$LOCK_UUID" >/dev/null 2>&1 || true
   gnome-extensions disable "$GLASS_UUID" >/dev/null 2>&1 || true
+  gnome-extensions disable "$WIN_UUID" >/dev/null 2>&1 || true
   enabled=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null) && \
     gsettings set org.gnome.shell enabled-extensions \
-      "$(python3 -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); print([x for x in v if x not in sys.argv[2:]])" "$enabled" "$EXT_UUID" "$LOCK_UUID" "$GLASS_UUID")"
+      "$(python3 -c "import ast,sys; v=ast.literal_eval(sys.argv[1].replace('@as ','')); print([x for x in v if x not in sys.argv[2:]])" "$enabled" "$EXT_UUID" "$LOCK_UUID" "$GLASS_UUID" "$WIN_UUID")"
   if [ -f "$CFG/.input-source-backup" ]; then
     gsettings set org.gnome.desktop.wm.keybindings switch-input-source "$(cat "$CFG/.input-source-backup")"
     rm -f "$CFG/.input-source-backup"
@@ -34,7 +36,7 @@ fi
 
 rm -rf "$PREFIX/kalulu" "$HOME/.local/bin/kalulu" "$HOME/.local/bin/kalulu-toggle" \
        "$PREFIX/applications/$APP_ID.desktop" "$HOME/.config/autostart/$APP_ID.desktop" \
-       "$PREFIX/icons/hicolor/scalable/apps/$APP_ID.svg" "$PREFIX/gnome-shell/extensions/$EXT_UUID" "$PREFIX/gnome-shell/extensions/$LOCK_UUID" "$PREFIX/gnome-shell/extensions/$GLASS_UUID"
+       "$PREFIX/icons/hicolor/scalable/apps/$APP_ID.svg" "$PREFIX/gnome-shell/extensions/$EXT_UUID" "$PREFIX/gnome-shell/extensions/$LOCK_UUID" "$PREFIX/gnome-shell/extensions/$GLASS_UUID" "$PREFIX/gnome-shell/extensions/$WIN_UUID"
 rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/kalulu"   # clipboard history, lock screen data, cut-out model
 [ "${1:-}" = "--purge" ] && rm -rf "$CFG" && echo "Removed $CFG"
 echo "Kalulu uninstalled."
